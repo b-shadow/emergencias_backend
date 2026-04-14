@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# IDE
+.vscode/
+.idea/
+
+# Alembic cache
+alembic/__pycache__/
+
+# Firebase credentials (NEVER commit these!)
+firebase-credentials.json
+*firebase-adminsdk*.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
