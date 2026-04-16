@@ -111,6 +111,32 @@ def get_asignaciones_activas(
                     "longitud": taller_obj.longitud,
                 }
             
+            # Incluir resultados de servicio si existen
+            if asignacion.resultados and len(asignacion.resultados) > 0:
+                asignacion_dict["resultados"] = []
+                for resultado in asignacion.resultados:
+                    resultado_dict = {
+                        "id_resultado_servicio": str(resultado.id_resultado_servicio),
+                        "id_asignacion": str(resultado.id_asignacion),
+                        "id_solicitud": str(resultado.id_solicitud),
+                        "id_taller_servicio": str(resultado.id_taller_servicio) if resultado.id_taller_servicio else None,
+                        "diagnostico": resultado.diagnostico,
+                        "solucion_aplicada": resultado.solucion_aplicada,
+                        "estado_resultado": resultado.estado_resultado.value if resultado.estado_resultado else None,
+                        "requiere_seguimiento": resultado.requiere_seguimiento,
+                        "observaciones": resultado.observaciones,
+                        "fecha_registro": resultado.fecha_registro.isoformat() if resultado.fecha_registro else None,
+                    }
+                    # Incluir información del servicio si existe
+                    if resultado.taller_servicio:
+                        resultado_dict["taller_servicio"] = {
+                            "id_taller_servicio": str(resultado.taller_servicio.id_taller_servicio),
+                            "nombre_servicio": resultado.taller_servicio.nombre_servicio if hasattr(resultado.taller_servicio, 'nombre_servicio') else resultado.taller_servicio.servicio.nombre_servicio if hasattr(resultado.taller_servicio, 'servicio') else 'Servicio',
+                        }
+                    asignacion_dict["resultados"].append(resultado_dict)
+            else:
+                asignacion_dict["resultados"] = []
+            
             result.append(asignacion_dict)
         
         logger.info(f"Retornando {len(result)} asignaciones con información completa")

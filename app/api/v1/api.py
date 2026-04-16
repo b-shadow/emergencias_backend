@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     administrador_especialidades,
     administrador_servicios,
     estadisticas_taller,
+    estadisticas_sistema,
     notificaciones,
     postulaciones,
     push,
@@ -29,6 +30,7 @@ api_router.include_router(especialidades_servicios.router)
 api_router.include_router(administrador_especialidades.router, prefix="/admin/especialidades", tags=["Admin"])
 api_router.include_router(administrador_servicios.router, prefix="/admin/servicios", tags=["Admin"])
 api_router.include_router(estadisticas_taller.router, prefix="/estadisticas-taller", tags=["Estadísticas Taller"])
+api_router.include_router(estadisticas_sistema.router, prefix="/admin", tags=["Admin Estadísticas"])
 api_router.include_router(vehiculos.router, prefix="/vehiculos", tags=["Vehículos"])
 api_router.include_router(solicitudes_emergencia.router, prefix="/solicitudes_emergencia", tags=["Solicitudes de Emergencia"])
 api_router.include_router(postulaciones.router, prefix="/postulaciones", tags=["Postulaciones"])

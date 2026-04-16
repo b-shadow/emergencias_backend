@@ -154,22 +154,18 @@ class NotificacionService:
         )
 
         # 2. Obtener tokens activos del usuario
-        logger.info(f"[NOTIF] Obteniendo tokens del usuario {id_usuario_destino}")
         tokens_activos = DispositivoPushService.get_active_tokens_for_user(
             db=db,
             id_usuario=id_usuario_destino
         )
 
         tokens_fcm = [t.token_fcm for t in tokens_activos]
-        logger.info(f"[NOTIF] Tokens encontrados: {len(tokens_fcm)} para usuario {id_usuario_destino}")
-        
         tokens_exitosos = 0
         tokens_fallidos = len(tokens_fcm)
         estado_envio = EstadoEnvioNotificacion.PENDIENTE
 
         # 3. Intentar envío push si hay tokens y FCM está habilitado
         if tokens_fcm and FCMService.is_available():
-            logger.info(f"[NOTIF] 📤 Enviando {len(tokens_fcm)} tokens a FCM para usuario {id_usuario_destino}")
             # Preparar datos para push
             push_data = data or {}
             push_data.update({
@@ -192,7 +188,6 @@ class NotificacionService:
 
             tokens_exitosos = fcm_result['success_count']
             tokens_fallidos = fcm_result['failure_count']
-            logger.info(f"[NOTIF] ✅ FCM result: {tokens_exitosos} exitosos, {tokens_fallidos} fallidos")
 
             # Procesar resultados y desactivar tokens inválidos
             for result in fcm_result.get('results', []):
@@ -212,16 +207,10 @@ class NotificacionService:
             # Establecer estado de envío
             if tokens_exitosos > 0:
                 estado_envio = EstadoEnvioNotificacion.ENVIADA
-                logger.info(f"[NOTIF] ✅ Notificación marcada como ENVIADA")
             else:
                 estado_envio = EstadoEnvioNotificacion.FALLIDA
-                logger.warning(f"[NOTIF] ❌ Notificación marcada como FALLIDA")
         else:
             # No hay tokens o FCM deshabilitado - dejar como PENDIENTE
-            if not tokens_fcm:
-                logger.warning(f"[NOTIF] ⚠️  Sin tokens para usuario {id_usuario_destino} - Notificación en PENDIENTE")
-            if not FCMService.is_available():
-                logger.warning(f"[NOTIF] ⚠️  FCM no disponible - Notificación en PENDIENTE")
             estado_envio = EstadoEnvioNotificacion.PENDIENTE
 
         # 4. Actualizar estado en BD
