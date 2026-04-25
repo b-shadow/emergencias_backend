@@ -33,10 +33,14 @@ from app.schemas.incident_analysis import (
     ClassifyTextToolRequest,
     ClassifyTextToolResponse,
     AnalyzeIncidentToolResponse,
+    ProblemUrgencyRequest,
+    ProblemUrgencyResponse,
+    ProcessProblemToolResponse,
 )
 from app.schemas.common import MessageResponse
 from app.services.solicitud_service import SolicitudService
 from app.integrations.ai_text_audio import AITextAudioService
+from app.services.groq_urgency_service import GroqUrgencyService
 from loguru import logger
 
 
@@ -650,6 +654,35 @@ def classify_text_tool(
         return ClassifyTextToolResponse(
             success=False,
             error=f"Error al clasificar texto: {str(e)}"
+        )
+
+
+@router.post("/tools/procesar-problema", response_model=ProcessProblemToolResponse)
+async def process_problem_tool(
+    payload: ProblemUrgencyRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """
+    Procesa la descripción del problema con IA (Groq) para:
+    - Detectar nivel de urgencia (BAJO|MEDIO|ALTO)
+    - Generar mensaje tipo chatbot para el usuario
+    - Recomendar acción en app
+    """
+    try:
+        _ = db
+        _ = current_user
+        urgency_service = GroqUrgencyService()
+        result = await urgency_service.classify_problem(payload.texto)
+        return ProcessProblemToolResponse(
+            success=True,
+            data=ProblemUrgencyResponse(**result),
+        )
+    except Exception as e:
+        logger.error(f"Error en process_problem_tool: {e}")
+        return ProcessProblemToolResponse(
+            success=False,
+            error=f"Error al procesar problema: {str(e)}",
         )
 
 

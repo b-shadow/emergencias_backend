@@ -169,6 +169,29 @@ class AnalyzeIncidentToolResponse(BaseModel):
     error: Optional[str] = None
 
 
+class ProblemUrgencyRequest(BaseModel):
+    """Request para procesar descripción de problema con IA (Groq)."""
+    texto: str = Field(..., min_length=8, description="Descripción del problema")
+
+
+class ProblemUrgencyResponse(BaseModel):
+    """Resultado de clasificación de urgencia para el problema descrito."""
+    nivel_urgencia: str = Field(..., description="BAJO, MEDIO o ALTO")
+    criterio_detectado: Optional[str] = Field(None, description="Resumen del criterio aplicado")
+    mensaje_chatbot: str = Field(..., description="Mensaje para mostrar al usuario")
+    accion_recomendada: Optional[str] = Field(None, description="Acción sugerida en app")
+    confianza: float = Field(..., ge=0.0, le=1.0, description="Confianza de clasificación")
+    proveedor: str = Field(..., description="Proveedor de IA usado")
+    modelo: str = Field(..., description="Modelo LLM usado")
+
+
+class ProcessProblemToolResponse(BaseModel):
+    """Response del endpoint herramienta procesar-problema."""
+    success: bool
+    data: Optional[ProblemUrgencyResponse] = None
+    error: Optional[str] = None
+
+
 # ==================== Batch/Admin Schemas ====================
 
 class IncidentAnalysisSummary(BaseModel):

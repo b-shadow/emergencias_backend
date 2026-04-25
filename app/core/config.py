@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     text_classification_timeout_seconds: int = 30
     text_classification_confidence_threshold: float = 0.5
 
+    # Groq - Clasificación de urgencia por texto (LLM)
+    groq_api_key: str = "colocar api key aqui"
+    groq_model: str = "llama-3.1-8b-instant"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_timeout_seconds: int = 30
+
     model_config = ConfigDict(
         env_file=".env", 
         env_file_encoding="utf-8", 
