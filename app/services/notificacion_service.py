@@ -164,7 +164,7 @@ class NotificacionService:
         tokens_fallidos = len(tokens_fcm)
         estado_envio = EstadoEnvioNotificacion.PENDIENTE
 
-        # 3. Intentar envío push si hay tokens y FCM está habilitado
+        # 3. Intentar envío push si hay tokens
         if tokens_fcm and FCMService.is_available():
             # Preparar datos para push
             push_data = data or {}
@@ -209,8 +209,17 @@ class NotificacionService:
                 estado_envio = EstadoEnvioNotificacion.ENVIADA
             else:
                 estado_envio = EstadoEnvioNotificacion.FALLIDA
+        elif tokens_fcm and not FCMService.is_available():
+            # Hay tokens, pero FCM no está disponible: fue intento fallido de push.
+            # Marcar como FALLIDA para no ocultar este problema como "pendiente".
+            logger.warning(
+                "[NOTIFICACION] Push no enviado: hay tokens activos pero FCM no está disponible"
+            )
+            estado_envio = EstadoEnvioNotificacion.FALLIDA
+            tokens_exitosos = 0
+            tokens_fallidos = len(tokens_fcm)
         else:
-            # No hay tokens o FCM deshabilitado - dejar como PENDIENTE
+            # No hay tokens activos para el usuario (queda pendiente de próxima sesión/token)
             estado_envio = EstadoEnvioNotificacion.PENDIENTE
 
         # 4. Actualizar estado en BD

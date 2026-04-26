@@ -173,7 +173,15 @@ def get_push_status(
         "tokens_activos": len(dispositivos_activos),
         "tokens_totales": len(dispositivos),
         "fcm_enabled": settings.FCM_ENABLED,
-        "firebase_configurado": bool(settings.FIREBASE_CREDENTIALS_JSON or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")),
+        "firebase_configurado": bool(
+            settings.FIREBASE_CREDENTIALS_JSON
+            or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            or (
+                settings.fcm_project_id
+                and settings.fcm_client_email
+                and settings.fcm_private_key
+            )
+        ),
         "dispositivos": [
             {
                 "id": str(d.id_dispositivo_push),

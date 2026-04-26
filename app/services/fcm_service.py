@@ -1,6 +1,7 @@
 import json
 import logging
 import base64
+import os
 from typing import Any, Optional
 
 from app.core.config import settings
@@ -87,6 +88,23 @@ class FCMService:
                     except Exception as file_e:
                         logger.error(f"[FCM] ❌ Error cargando archivo: {file_e}")
                         raise
+            elif settings.fcm_project_id and settings.fcm_client_email and settings.fcm_private_key:
+                logger.info("[FCM] 📋 Usando credenciales legacy (FCM_PROJECT_ID/FCM_CLIENT_EMAIL/FCM_PRIVATE_KEY)")
+                private_key = settings.fcm_private_key.replace("\\n", "\n")
+                creds_dict = {
+                    "type": "service_account",
+                    "project_id": settings.fcm_project_id,
+                    "private_key": private_key,
+                    "client_email": settings.fcm_client_email,
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+                cred = credentials.Certificate(creds_dict)
+                logger.info("[FCM] ✅ Credenciales legacy convertidas correctamente")
+            elif os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+                creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+                logger.info(f"[FCM] 📋 Usando GOOGLE_APPLICATION_CREDENTIALS: {creds_path}")
+                cred = credentials.Certificate(creds_path)
+                logger.info("[FCM] ✅ Credenciales cargadas desde GOOGLE_APPLICATION_CREDENTIALS")
             else:
                 logger.warning("[FCM] ❌ FIREBASE_CREDENTIALS_JSON NO ESTÁ CONFIGURADA")
                 cls._initialized = True
@@ -115,7 +133,10 @@ class FCMService:
             return "FCM_ENABLED es False en settings"
         
         if not settings.FIREBASE_CREDENTIALS_JSON:
-            return "FIREBASE_CREDENTIALS_JSON no configurada"
+            has_legacy = bool(settings.fcm_project_id and settings.fcm_client_email and settings.fcm_private_key)
+            has_google_app_creds = bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+            if not has_legacy and not has_google_app_creds:
+                return "No hay credenciales FCM configuradas (FIREBASE_CREDENTIALS_JSON / legacy / GOOGLE_APPLICATION_CREDENTIALS)"
         
         try:
             import firebase_admin
