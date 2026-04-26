@@ -405,6 +405,7 @@ class SolicitudService:
                 "direccion_referencial",
                 "radio_busqueda_km",
                 "categoria_incidente",
+                "nivel_urgencia",
             }
             data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
         else:

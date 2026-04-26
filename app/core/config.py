@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     r2_bucket_name: str = ""
     r2_public_base_url: str = ""
 
+    # Supabase Storage (Optional)
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+    supabase_storage_bucket: str = "evidencias"
+
     # Firebase Cloud Messaging (Optional)
     fcm_project_id: str = ""
     fcm_client_email: str = ""

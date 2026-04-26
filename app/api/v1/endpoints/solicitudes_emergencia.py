@@ -1,11 +1,15 @@
-from uuid import UUID
+from pathlib import Path
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.core.enums import RolUsuario
+from app.core.enums import RolUsuario, TipoEvidencia, OrigenEvidencia
+from app.core.exceptions import bad_request, forbidden
+from app.integrations.supabase_storage import SupabaseStorageAdapter
+from app.models.evidencia import Evidencia
 from app.models.usuario import Usuario
 from app.models.vehiculo import Vehiculo
 from app.schemas.solicitud import (
@@ -20,6 +24,7 @@ from app.schemas.solicitud import (
     SolicitudDisponibleDetalleResponse,
     PostulacionCreateRequest,
     PostulacionResponse,
+    EvidenciaResponse,
 )
 from app.schemas.incident_analysis import (
     AudioTranscriptionRequest,
@@ -297,7 +302,8 @@ def get_solicitud_disponible_detalle(
     evidencias_list = []
     for evidencia in result["evidencias"]:
         evidencia_item = {
-            "tipo_evidencia": evidencia.tipo_evidencia,
+            "id_evidencia": evidencia.id_evidencia,
+            "tipo_evidencia": evidencia.tipo_evidencia.value if hasattr(evidencia.tipo_evidencia, "value") else str(evidencia.tipo_evidencia),
             "url_archivo": evidencia.url_archivo,
             "nombre_archivo": evidencia.nombre_archivo,
             "descripcion": evidencia.descripcion,
@@ -525,6 +531,135 @@ def update_solicitud(
     - ADMINISTRADOR: Puede actualizar cualquier solicitud
     """
     return SolicitudService.update_solicitud(db, solicitud_id, payload.model_dump(), current_user)
+
+
+@router.get("/{solicitud_id}/evidencias", response_model=list[EvidenciaResponse])
+def list_solicitud_evidencias(
+    solicitud_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """
+    Lista evidencias de una solicitud.
+    - CLIENTE: solo de sus solicitudes
+    - TALLER/ADMINISTRADOR: acceso permitido según visibilidad general de solicitud
+    """
+    SolicitudService.get_solicitud(db, solicitud_id, current_user)
+    evidencias = (
+        db.query(Evidencia)
+        .filter(Evidencia.id_solicitud == solicitud_id)
+        .order_by(Evidencia.fecha_subida.desc())
+        .all()
+    )
+    return [
+        EvidenciaResponse(
+            id_evidencia=e.id_evidencia,
+            tipo_evidencia=e.tipo_evidencia.value if hasattr(e.tipo_evidencia, "value") else str(e.tipo_evidencia),
+            url_archivo=e.url_archivo,
+            nombre_archivo=e.nombre_archivo,
+            descripcion=e.descripcion,
+            fecha_subida=e.fecha_subida,
+        )
+        for e in evidencias
+    ]
+
+
+@router.post(
+    "/{solicitud_id}/evidencias/imagen",
+    response_model=EvidenciaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_solicitud_evidencia_imagen(
+    solicitud_id: UUID,
+    archivo: UploadFile = File(...),
+    descripcion: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """
+    Sube o reemplaza la imagen de evidencia principal del cliente en una solicitud.
+    """
+    if current_user.rol not in {RolUsuario.CLIENTE, RolUsuario.ADMINISTRADOR}:
+        raise forbidden("Solo cliente o administrador pueden adjuntar evidencias de imagen")
+
+    SolicitudService.get_solicitud(db, solicitud_id, current_user)
+
+    mime_type = (archivo.content_type or "").lower().strip()
+    if not mime_type.startswith("image/"):
+        raise bad_request("El archivo debe ser una imagen válida")
+
+    contenido = await archivo.read()
+    if not contenido:
+        raise bad_request("El archivo está vacío")
+
+    max_size_bytes = 10 * 1024 * 1024  # 10MB
+    if len(contenido) > max_size_bytes:
+        raise bad_request("La imagen excede el tamaño máximo de 10MB")
+
+    storage = SupabaseStorageAdapter()
+    if not storage.is_configured():
+        raise bad_request(
+            "Storage no configurado. Define SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY y SUPABASE_STORAGE_BUCKET."
+        )
+
+    original_name = (archivo.filename or "evidencia.jpg").strip()
+    extension = Path(original_name).suffix or ".jpg"
+    safe_name = f"{uuid4().hex}{extension}"
+    object_path = f"solicitudes/{solicitud_id}/cliente/{safe_name}"
+
+    try:
+        url_publica = storage.upload_bytes(
+            object_path=object_path,
+            content=contenido,
+            content_type=mime_type,
+            upsert=True,
+        )
+    except Exception as exc:
+        logger.exception("Error subiendo evidencia a storage")
+        raise bad_request(f"No se pudo subir la evidencia: {exc}")
+
+    evidencia_existente = (
+        db.query(Evidencia)
+        .filter(
+            Evidencia.id_solicitud == solicitud_id,
+            Evidencia.tipo_evidencia == TipoEvidencia.IMAGEN,
+            Evidencia.origen == OrigenEvidencia.CLIENTE,
+        )
+        .order_by(Evidencia.fecha_subida.desc())
+        .first()
+    )
+
+    if evidencia_existente:
+        evidencia_existente.url_archivo = url_publica
+        evidencia_existente.nombre_archivo = original_name
+        evidencia_existente.mime_type = mime_type
+        evidencia_existente.tamano_bytes = len(contenido)
+        evidencia_existente.descripcion = descripcion or evidencia_existente.descripcion
+        evidencia = evidencia_existente
+    else:
+        evidencia = Evidencia(
+            id_solicitud=solicitud_id,
+            tipo_evidencia=TipoEvidencia.IMAGEN,
+            url_archivo=url_publica,
+            nombre_archivo=original_name,
+            mime_type=mime_type,
+            tamano_bytes=len(contenido),
+            descripcion=descripcion,
+            origen=OrigenEvidencia.CLIENTE,
+        )
+        db.add(evidencia)
+
+    db.commit()
+    db.refresh(evidencia)
+
+    return EvidenciaResponse(
+        id_evidencia=evidencia.id_evidencia,
+        tipo_evidencia=evidencia.tipo_evidencia.value if hasattr(evidencia.tipo_evidencia, "value") else str(evidencia.tipo_evidencia),
+        url_archivo=evidencia.url_archivo,
+        nombre_archivo=evidencia.nombre_archivo,
+        descripcion=evidencia.descripcion,
+        fecha_subida=evidencia.fecha_subida,
+    )
 
 
 @router.post("/{solicitud_id}/cancel", response_model=MessageResponse)
