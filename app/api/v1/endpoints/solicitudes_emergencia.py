@@ -1,5 +1,6 @@
 from pathlib import Path
 from uuid import UUID, uuid4
+import mimetypes
 
 from fastapi import APIRouter, Depends, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
@@ -584,8 +585,15 @@ async def upload_solicitud_evidencia_imagen(
 
     SolicitudService.get_solicitud(db, solicitud_id, current_user)
 
+    original_name = (archivo.filename or "evidencia.jpg").strip()
     mime_type = (archivo.content_type or "").lower().strip()
     if not mime_type.startswith("image/"):
+        mime_guess, _ = mimetypes.guess_type(original_name)
+        mime_type = (mime_guess or "").lower().strip()
+
+    extensiones_validas = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+    extension = Path(original_name).suffix.lower()
+    if not mime_type.startswith("image/") and extension not in extensiones_validas:
         raise bad_request("El archivo debe ser una imagen válida")
 
     contenido = await archivo.read()
@@ -602,7 +610,9 @@ async def upload_solicitud_evidencia_imagen(
             "Storage no configurado. Define SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY y SUPABASE_STORAGE_BUCKET."
         )
 
-    original_name = (archivo.filename or "evidencia.jpg").strip()
+    if not mime_type.startswith("image/"):
+        mime_type = "image/jpeg"
+
     extension = Path(original_name).suffix or ".jpg"
     safe_name = f"{uuid4().hex}{extension}"
     object_path = f"solicitudes/{solicitud_id}/cliente/{safe_name}"
