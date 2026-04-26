@@ -1,6 +1,6 @@
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import secrets
 from uuid import UUID
 
@@ -390,7 +390,9 @@ class AuthService:
         
         # Generar token único
         reset_token = secrets.token_urlsafe(32)
-        token_expiry = datetime.utcnow() + timedelta(minutes=settings.reset_token_expire_minutes)
+        token_expiry = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.reset_token_expire_minutes
+        )
         
         # Guardar token en BD
         usuario.reset_token = reset_token
@@ -450,7 +452,8 @@ class AuthService:
             raise bad_request("El enlace de recuperación es inválido. Por favor, solicita uno nuevo.")
         
         # Validar que el token no esté expirado
-        if usuario.reset_token_expires is None or datetime.utcnow() > usuario.reset_token_expires:
+        now = AuthService._utc_now_matching(usuario.reset_token_expires)
+        if usuario.reset_token_expires is None or now > usuario.reset_token_expires:
             usuario.reset_token = None
             usuario.reset_token_expires = None
             db.commit()
@@ -476,3 +479,12 @@ class AuthService:
             "mensaje": "Contraseña actualizada correctamente. Ahora puedes iniciar sesión con tu nueva contraseña.",
             "estado": "contrasena_actualizada",
         }
+    @staticmethod
+    def _utc_now_matching(dt_value: datetime | None = None) -> datetime:
+        """
+        Devuelve 'ahora' con zona horaria compatible con dt_value para evitar
+        comparaciones naive vs aware que pueden romper en producción.
+        """
+        if dt_value and dt_value.tzinfo is not None:
+            return datetime.now(dt_value.tzinfo)
+        return datetime.now(timezone.utc).replace(tzinfo=None)
