@@ -327,44 +327,99 @@ class FCMService:
                 **kwargs
             )
 
-            response = messaging.send_multicast(message)
+            # send_multicast depende de /batch (puede fallar con 404 en algunos entornos).
+            # Preferir send_each_for_multicast cuando exista.
+            if hasattr(messaging, "send_each_for_multicast"):
+                response = messaging.send_each_for_multicast(message)
 
+                results = []
+                message_ids = []
+                success_count = 0
+                failure_count = 0
+
+                for idx, send_response in enumerate(response.responses):
+                    if send_response.exception is None:
+                        success_count += 1
+                        results.append({
+                            'token': tokens[idx],
+                            'success': True,
+                            'message_id': send_response.message_id,
+                            'token_invalid': False
+                        })
+                        message_ids.append(send_response.message_id)
+                    else:
+                        failure_count += 1
+                        error_str = str(send_response.exception).lower()
+                        is_invalid_token = (
+                            "invalid registration token" in error_str or
+                            "registration token is invalid" in error_str or
+                            "the registration token is not a valid fcm token" in error_str or
+                            "no matching credential found" in error_str
+                        )
+                        results.append({
+                            'token': tokens[idx],
+                            'success': False,
+                            'error': str(send_response.exception),
+                            'token_invalid': is_invalid_token
+                        })
+
+                logger.info(
+                    f"Multicast (send_each_for_multicast) enviado. Éxito: {success_count}, "
+                    f"Fallos: {failure_count}"
+                )
+
+                return {
+                    'success_count': success_count,
+                    'failure_count': failure_count,
+                    'results': results,
+                    'message_ids': message_ids
+                }
+
+            # Fallback seguro: enviar token por token usando send(message)
+            logger.warning(
+                "[FCM] send_each_for_multicast no disponible; usando fallback por token"
+            )
             results = []
             message_ids = []
-            for idx, send_response in enumerate(response.responses):
-                if send_response.exception is None:
+            success_count = 0
+            failure_count = 0
+
+            for token in tokens:
+                one = cls.send_to_token(
+                    token=token,
+                    title=title,
+                    body=body,
+                    data=data,
+                    **kwargs
+                )
+                if one.get("success"):
+                    success_count += 1
+                    message_ids.append(one.get("message_id"))
                     results.append({
-                        'token': tokens[idx],
-                        'success': True,
-                        'message_id': send_response.message_id,
-                        'token_invalid': False
+                        "token": token,
+                        "success": True,
+                        "message_id": one.get("message_id"),
+                        "token_invalid": False,
                     })
-                    message_ids.append(send_response.message_id)
                 else:
-                    error_str = str(send_response.exception).lower()
-                    is_invalid_token = (
-                        "invalid registration token" in error_str or
-                        "registration token is invalid" in error_str or
-                        "the registration token is not a valid fcm token" in error_str or
-                        "no matching credential found" in error_str
-                    )
+                    failure_count += 1
                     results.append({
-                        'token': tokens[idx],
-                        'success': False,
-                        'error': str(send_response.exception),
-                        'token_invalid': is_invalid_token
+                        "token": token,
+                        "success": False,
+                        "error": one.get("error"),
+                        "token_invalid": one.get("token_invalid", False),
                     })
 
             logger.info(
-                f"Multicast enviado. Éxito: {response.successful_count}, "
-                f"Fallos: {response.failed_count}"
+                f"Multicast (fallback por token) enviado. Éxito: {success_count}, "
+                f"Fallos: {failure_count}"
             )
 
             return {
-                'success_count': response.successful_count,
-                'failure_count': response.failed_count,
-                'results': results,
-                'message_ids': message_ids
+                "success_count": success_count,
+                "failure_count": failure_count,
+                "results": results,
+                "message_ids": message_ids,
             }
 
         except Exception as e:
