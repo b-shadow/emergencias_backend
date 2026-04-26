@@ -1,182 +1,153 @@
 import smtplib
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+import httpx
 
 from app.core.config import settings
 
 
 class EmailService:
-    """Servicio para envío de correos mediante Gmail SMTP"""
+    """Servicio para envio de correos (SendGrid o SMTP)."""
 
     @staticmethod
     def enviar_recuperacion_contrasena(correo_destino: str, token: str) -> bool:
         """
-        Envía correo con enlace de recuperación de contraseña
-        
-        Args:
-            correo_destino: Email del usuario
-            token: Token de recuperación
-            
-        Returns:
-            bool: True si se envió exitosamente, False en caso contrario
+        Envia correo con enlace de recuperacion de contrasena.
         """
-        try:
-            # Generar enlace de recuperación
-            reset_link = f"{settings.frontend_url}/reset-password?token={token}"
-            
-            # Crear mensaje
-            mensaje = MIMEMultipart("alternative")
-            mensaje["Subject"] = "Recupera tu contraseña - Plataforma de Emergencias Vehiculares"
-            mensaje["From"] = settings.smtp_user
-            mensaje["To"] = correo_destino
-            
-            # Cuerpo en texto plano
-            texto_plano = f"""
+        reset_link = f"{settings.frontend_url}/reset-password?token={token}"
+        asunto = "Recupera tu contrasena - Plataforma de Emergencias Vehiculares"
+        texto_plano = f"""
 Hola,
 
-Recibimos una solicitud para recuperar tu contraseña. 
-Si no fuiste tú, ignora este correo.
+Recibimos una solicitud para recuperar tu contrasena.
+Si no fuiste tu, ignora este correo.
 
-Para resetear tu contraseña, haz clic en el siguiente enlace:
+Para resetear tu contrasena, usa este enlace:
 {reset_link}
 
-Este enlace es válido por 15 minutos.
-
-Si el enlace no funciona, copia y pega esto en tu navegador:
-{reset_link}
-
-Si tienes problemas, contacta a nuestro equipo de soporte.
+Este enlace es valido por {settings.reset_token_expire_minutes} minutos.
 
 Saludos,
-Equipo de Atención de Emergencias Vehiculares
-            """
-            
-            # Cuerpo en HTML
-            html = f"""
+Equipo de Atencion de Emergencias Vehiculares
+        """.strip()
+        html = f"""
 <html>
   <body>
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #333;">Recuperar Contraseña</h2>
+      <h2 style="color: #333;">Recuperar contrasena</h2>
       <p>Hola,</p>
-      <p>Recibimos una solicitud para recuperar tu contraseña. Si no fuiste tú, <strong>ignora este correo</strong>.</p>
-      
-      <p style="margin-top: 30px;">
-        <a href="{reset_link}" 
-           style="background-color: #007bff; color: white; padding: 12px 30px; 
+      <p>Recibimos una solicitud para recuperar tu contrasena. Si no fuiste tu, <strong>ignora este correo</strong>.</p>
+      <p style="margin-top: 24px;">
+        <a href="{reset_link}"
+           style="background-color: #007bff; color: white; padding: 12px 30px;
                   text-decoration: none; border-radius: 5px; display: inline-block;">
-          Resetear Contraseña
+          Resetear contrasena
         </a>
       </p>
-      
       <p style="color: #666; font-size: 12px;">
-        Este enlace es válido por 15 minutos.
+        Este enlace es valido por {settings.reset_token_expire_minutes} minutos.
       </p>
-      
-      <p style="color: #666; font-size: 12px; margin-top: 30px;">
-        Si el botón no funciona, copia este enlace en tu navegador:<br>
+      <p style="color: #666; font-size: 12px; margin-top: 20px;">
+        Si el boton no funciona, copia este enlace en tu navegador:<br>
         <code>{reset_link}</code>
-      </p>
-      
-      <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-      <p style="color: #999; font-size: 12px; text-align: center;">
-        Equipo de Atención de Emergencias Vehiculares
       </p>
     </div>
   </body>
 </html>
-            """
-            
-            # Adjuntar ambas versiones
-            parte_texto = MIMEText(texto_plano, "plain")
-            parte_html = MIMEText(html, "html")
-            mensaje.attach(parte_texto)
-            mensaje.attach(parte_html)
-            
-            # Enviar correo
-            with smtplib.SMTP(settings.smtp_server, settings.smtp_port) as servidor:
-                servidor.starttls()  # Iniciar TLS
-                servidor.login(settings.smtp_user, settings.smtp_password)
-                servidor.sendmail(settings.smtp_user, correo_destino, mensaje.as_string())
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error al enviar correo a {correo_destino}: {str(e)}")
+        """.strip()
+
+        provider = (settings.email_provider or "smtp").strip().lower()
+        if provider == "sendgrid":
+            return EmailService._send_with_sendgrid(
+                correo_destino=correo_destino,
+                asunto=asunto,
+                texto_plano=texto_plano,
+                html=html,
+            )
+
+        return EmailService._send_with_smtp(
+            correo_destino=correo_destino,
+            asunto=asunto,
+            texto_plano=texto_plano,
+            html=html,
+        )
+
+    @staticmethod
+    def _resolve_from_email() -> str:
+        if settings.email_from and settings.email_from.strip():
+            return settings.email_from.strip()
+        if settings.smtp_user and settings.smtp_user.strip():
+            return settings.smtp_user.strip()
+        return "no-reply@localhost"
+
+    @staticmethod
+    def _send_with_sendgrid(
+        correo_destino: str,
+        asunto: str,
+        texto_plano: str,
+        html: str,
+    ) -> bool:
+        try:
+            api_key = (settings.sendgrid_api_key or "").strip()
+            if not api_key:
+                print("SendGrid no configurado: falta SENDGRID_API_KEY")
+                return False
+
+            payload = {
+                "personalizations": [{"to": [{"email": correo_destino}]}],
+                "from": {"email": EmailService._resolve_from_email()},
+                "subject": asunto,
+                "content": [
+                    {"type": "text/plain", "value": texto_plano},
+                    {"type": "text/html", "value": html},
+                ],
+            }
+
+            response = httpx.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=20,
+            )
+
+            if response.status_code in (200, 202):
+                return True
+
+            print(
+                f"Error SendGrid ({response.status_code}) enviando a {correo_destino}: "
+                f"{response.text}"
+            )
+            return False
+        except Exception as exc:
+            print(f"Error SendGrid enviando a {correo_destino}: {str(exc)}")
             return False
 
     @staticmethod
-    def enviar_confirmacion_registro(correo_destino: str, nombre: str) -> bool:
-        """
-        Envía correo de confirmación de registro
-        
-        Args:
-            correo_destino: Email del usuario
-            nombre: Nombre del usuario
-            
-        Returns:
-            bool: True si se envió exitosamente
-        """
+    def _send_with_smtp(
+        correo_destino: str,
+        asunto: str,
+        texto_plano: str,
+        html: str,
+    ) -> bool:
         try:
+            remitente = EmailService._resolve_from_email()
+
             mensaje = MIMEMultipart("alternative")
-            mensaje["Subject"] = "Bienvenido a la Plataforma - Confirmación de Registro"
-            mensaje["From"] = settings.smtp_user
+            mensaje["Subject"] = asunto
+            mensaje["From"] = remitente
             mensaje["To"] = correo_destino
-            
-            texto_plano = f"""
-Hola {nombre},
+            mensaje.attach(MIMEText(texto_plano, "plain"))
+            mensaje.attach(MIMEText(html, "html"))
 
-¡Bienvenido a la Plataforma de Atención de Emergencias Vehiculares!
-
-Tu cuenta ha sido registrada exitosamente. Ahora puedes iniciar sesión con tus credenciales.
-
-Puedes acceder a la plataforma en:
-{settings.frontend_url}
-
-Si tienes preguntas, no dudes en contactarnos.
-
-Saludos,
-Equipo de Emergencias Vehiculares
-            """
-            
-            html = f"""
-<html>
-  <body>
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #333;">¡Bienvenido!</h2>
-      <p>Hola <strong>{nombre}</strong>,</p>
-      <p>¡Bienvenido a la <strong>Plataforma de Atención de Emergencias Vehiculares</strong>!</p>
-      
-      <p>Tu cuenta ha sido registrada exitosamente. Ahora puedes iniciar sesión con tus credenciales.</p>
-      
-      <p style="margin-top: 30px;">
-        <a href="{settings.frontend_url}" 
-           style="background-color: #28a745; color: white; padding: 12px 30px; 
-                  text-decoration: none; border-radius: 5px; display: inline-block;">
-          Ir a la Plataforma
-        </a>
-      </p>
-      
-      <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-      <p style="color: #999; font-size: 12px; text-align: center;">
-        Si tienes preguntas, contáctanos.
-      </p>
-    </div>
-  </body>
-</html>
-            """
-            
-            parte_texto = MIMEText(texto_plano, "plain")
-            parte_html = MIMEText(html, "html")
-            mensaje.attach(parte_texto)
-            mensaje.attach(parte_html)
-            
             with smtplib.SMTP(settings.smtp_server, settings.smtp_port) as servidor:
                 servidor.starttls()
                 servidor.login(settings.smtp_user, settings.smtp_password)
-                servidor.sendmail(settings.smtp_user, correo_destino, mensaje.as_string())
-            
+                servidor.sendmail(remitente, correo_destino, mensaje.as_string())
             return True
-            
-        except Exception as e:
-            print(f"Error al enviar confirmación a {correo_destino}: {str(e)}")
+        except Exception as exc:
+            print(f"Error SMTP enviando a {correo_destino}: {str(exc)}")
             return False

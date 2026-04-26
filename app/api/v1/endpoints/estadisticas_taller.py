@@ -20,6 +20,15 @@ router = APIRouter()
 def obtener_mis_estadisticas(
     fecha_inicio: str | None = Query(None, description="Fecha inicio YYYY-MM-DD"),
     fecha_fin: str | None = Query(None, description="Fecha fin YYYY-MM-DD"),
+    agrupar_por: str = Query(
+        "dia",
+        description="Agrupacion del reporte: dia|semana|mes|categoria|urgencia|estado_solicitud|estado_asignacion|estado_resultado",
+    ),
+    nivel_urgencia: str | None = Query(None, description="Filtro por urgencia"),
+    categoria_incidente: str | None = Query(None, description="Filtro por categoria"),
+    estado_solicitud: str | None = Query(None, description="Filtro por estado solicitud"),
+    estado_asignacion: str | None = Query(None, description="Filtro por estado asignacion"),
+    estado_resultado: str | None = Query(None, description="Filtro por estado resultado"),
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
@@ -75,7 +84,16 @@ def obtener_mis_estadisticas(
 
     # Obtener estadísticas
     respuesta = EstadisticasTallerService.obtener_estadisticas_taller(
-        db, id_taller, fecha_inicio_dt, fecha_fin_dt
+        db=db,
+        id_taller=id_taller,
+        fecha_inicio=fecha_inicio_dt,
+        fecha_fin=fecha_fin_dt,
+        agrupar_por=agrupar_por,
+        nivel_urgencia=nivel_urgencia,
+        categoria_incidente=categoria_incidente,
+        estado_solicitud=estado_solicitud,
+        estado_asignacion=estado_asignacion,
+        estado_resultado=estado_resultado,
     )
 
     return respuesta

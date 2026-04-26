@@ -29,10 +29,13 @@ class Settings(BaseSettings):
     database_url: str = ""
 
     # Email Configuration
+    email_provider: str = "sendgrid"  # sendgrid | smtp
+    email_from: str = ""
     smtp_server: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
+    sendgrid_api_key: str = ""
     frontend_url: str = "http://localhost:5173"
 
     # Cloudflare R2 (Optional)

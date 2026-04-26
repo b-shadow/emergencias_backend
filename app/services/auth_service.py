@@ -398,7 +398,17 @@ class AuthService:
         db.commit()
         
         # Enviar correo
-        EmailService.enviar_recuperacion_contrasena(usuario.correo, reset_token)
+        correo_enviado = EmailService.enviar_recuperacion_contrasena(
+            usuario.correo, reset_token
+        )
+        if not correo_enviado:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "No se pudo enviar el correo de recuperacion en este momento. "
+                    "Intenta nuevamente en unos minutos."
+                ),
+            )
         
         # Registrar en bitácora
         AuthService._registrar_bitacora(

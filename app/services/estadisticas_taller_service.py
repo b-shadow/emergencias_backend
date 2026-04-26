@@ -1,23 +1,29 @@
+from collections import defaultdict
 from datetime import datetime, timedelta
-from sqlalchemy import and_, func, cast, Integer
+
+from sqlalchemy import Integer, and_, cast, func
 from sqlalchemy.orm import Session
 
-from app.core.enums import EstadoAsignacion, EstadoResultado
+from app.core.enums import EstadoAsignacion, EstadoResultado, EstadoSolicitud
 from app.models.asignacion_atencion import AsignacionAtencion
 from app.models.resultado_servicio import ResultadoServicio
 from app.models.solicitud_emergencia import SolicitudEmergencia
 from app.models.taller import Taller
 from app.schemas.estadisticas_taller import (
     EstadisticaDemacruzada,
-    EstadisticaGeneralTaller,
     EstadisticaDiagnostico,
+    EstadisticaGeneralTaller,
     EstadisticaTiempoAtencion,
     EstadisticasTallerResponse,
+    FiltroReporteAplicado,
+    ReporteFiltradoTaller,
+    ReporteGraficos,
+    ReporteTablaItem,
 )
 
 
 class EstadisticasTallerService:
-    """Servicio para calcular estadísticas del taller"""
+    """Servicio para calcular estadisticas del taller."""
 
     @staticmethod
     def obtener_estadisticas_taller(
@@ -25,46 +31,84 @@ class EstadisticasTallerService:
         id_taller: str,
         fecha_inicio: datetime | None = None,
         fecha_fin: datetime | None = None,
+        agrupar_por: str = "dia",
+        nivel_urgencia: str | None = None,
+        categoria_incidente: str | None = None,
+        estado_solicitud: str | None = None,
+        estado_asignacion: str | None = None,
+        estado_resultado: str | None = None,
     ) -> EstadisticasTallerResponse:
-        """
-        Calcula estadísticas del taller en un rango de fechas.
-        Si no se especifican fechas, usa los últimos 30 días.
-        """
-
-        # Valores por defecto: últimos 30 días
         if not fecha_fin:
             fecha_fin = datetime.utcnow()
         if not fecha_inicio:
             fecha_inicio = fecha_fin - timedelta(days=30)
 
-        # Validar que el taller existe
         taller = db.query(Taller).filter(Taller.id_taller == id_taller).first()
         if not taller:
             return EstadisticasTallerResponse(
                 id_taller=str(id_taller),
                 nombre_taller="Desconocido",
                 estadisticas=None,
+                reporte=None,
                 mensaje_vacio="Taller no encontrado",
             )
 
-        # Obtener todas las asignaciones del taller en el rango de fechas
-        asignaciones = db.query(AsignacionAtencion).filter(
-            and_(
-                AsignacionAtencion.id_taller == id_taller,
-                AsignacionAtencion.fecha_asignacion >= fecha_inicio,
-                AsignacionAtencion.fecha_asignacion <= fecha_fin,
+        asignaciones = (
+            db.query(AsignacionAtencion)
+            .filter(
+                and_(
+                    AsignacionAtencion.id_taller == id_taller,
+                    AsignacionAtencion.fecha_asignacion >= fecha_inicio,
+                    AsignacionAtencion.fecha_asignacion <= fecha_fin,
+                )
             )
-        ).all()
+            .all()
+        )
+
+        filtros = {
+            "nivel_urgencia": nivel_urgencia.strip().upper() if nivel_urgencia else None,
+            "categoria_incidente": (
+                categoria_incidente.strip().upper() if categoria_incidente else None
+            ),
+            "estado_solicitud": estado_solicitud.strip().upper() if estado_solicitud else None,
+            "estado_asignacion": (
+                estado_asignacion.strip().upper() if estado_asignacion else None
+            ),
+            "estado_resultado": estado_resultado.strip().upper() if estado_resultado else None,
+        }
+
+        asignaciones = EstadisticasTallerService._aplicar_filtros_asignaciones(
+            db=db,
+            asignaciones=asignaciones,
+            nivel_urgencia=filtros["nivel_urgencia"],
+            categoria_incidente=filtros["categoria_incidente"],
+            estado_solicitud=filtros["estado_solicitud"],
+            estado_asignacion=filtros["estado_asignacion"],
+            estado_resultado=filtros["estado_resultado"],
+        )
+
+        reporte = EstadisticasTallerService._generar_reporte_filtrado(
+            db=db,
+            asignaciones=asignaciones,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            agrupar_por=agrupar_por,
+            nivel_urgencia=filtros["nivel_urgencia"],
+            categoria_incidente=filtros["categoria_incidente"],
+            estado_solicitud=filtros["estado_solicitud"],
+            estado_asignacion=filtros["estado_asignacion"],
+            estado_resultado=filtros["estado_resultado"],
+        )
 
         if not asignaciones:
             return EstadisticasTallerResponse(
                 id_taller=str(id_taller),
                 nombre_taller=taller.nombre_taller,
                 estadisticas=None,
-                mensaje_vacio="No existen datos suficientes para generar estadísticas en el rango seleccionado.",
+                reporte=reporte,
+                mensaje_vacio="No existen datos suficientes para generar estadisticas en el rango seleccionado.",
             )
 
-        # Calcular métricas
         diagnosticos, total_diag_seguimiento = EstadisticasTallerService._calcular_diagnosticos(
             db, asignaciones
         )
@@ -107,46 +151,311 @@ class EstadisticasTallerService:
             id_taller=str(id_taller),
             nombre_taller=taller.nombre_taller,
             estadisticas=estadisticas,
+            reporte=reporte,
         )
+
+    @staticmethod
+    def _aplicar_filtros_asignaciones(
+        db: Session,
+        asignaciones: list[AsignacionAtencion],
+        nivel_urgencia: str | None,
+        categoria_incidente: str | None,
+        estado_solicitud: str | None,
+        estado_asignacion: str | None,
+        estado_resultado: str | None,
+    ) -> list[AsignacionAtencion]:
+        if not asignaciones:
+            return []
+
+        solicitud_ids = [a.id_solicitud for a in asignaciones]
+        solicitud_map = {
+            s.id_solicitud: s
+            for s in db.query(SolicitudEmergencia)
+            .filter(SolicitudEmergencia.id_solicitud.in_(solicitud_ids))
+            .all()
+        }
+
+        resultados = (
+            db.query(ResultadoServicio.id_asignacion, ResultadoServicio.estado_resultado)
+            .filter(
+                ResultadoServicio.id_asignacion.in_(
+                    [a.id_asignacion for a in asignaciones]
+                )
+            )
+            .all()
+        )
+        estados_resultado_por_asignacion: dict = defaultdict(set)
+        for id_asignacion, estado in resultados:
+            estados_resultado_por_asignacion[id_asignacion].add(
+                estado.value if hasattr(estado, "value") else str(estado)
+            )
+
+        filtradas: list[AsignacionAtencion] = []
+        for asignacion in asignaciones:
+            solicitud = solicitud_map.get(asignacion.id_solicitud)
+            if not solicitud:
+                continue
+
+            urgencia_actual = (
+                solicitud.nivel_urgencia.value
+                if hasattr(solicitud.nivel_urgencia, "value")
+                else str(solicitud.nivel_urgencia)
+            )
+            categoria_actual = (solicitud.categoria_incidente or "").upper()
+            estado_solicitud_actual = (
+                solicitud.estado_actual.value
+                if hasattr(solicitud.estado_actual, "value")
+                else str(solicitud.estado_actual)
+            )
+            estado_asignacion_actual = (
+                asignacion.estado_asignacion.value
+                if hasattr(asignacion.estado_asignacion, "value")
+                else str(asignacion.estado_asignacion)
+            )
+            estados_resultado_actual = estados_resultado_por_asignacion.get(
+                asignacion.id_asignacion, set()
+            )
+
+            if nivel_urgencia and urgencia_actual != nivel_urgencia:
+                continue
+            if categoria_incidente and categoria_actual != categoria_incidente:
+                continue
+            if estado_solicitud and estado_solicitud_actual != estado_solicitud:
+                continue
+            if estado_asignacion and estado_asignacion_actual != estado_asignacion:
+                continue
+            if estado_resultado and estado_resultado not in estados_resultado_actual:
+                continue
+
+            filtradas.append(asignacion)
+
+        return filtradas
+
+    @staticmethod
+    def _generar_reporte_filtrado(
+        db: Session,
+        asignaciones: list[AsignacionAtencion],
+        fecha_inicio: datetime,
+        fecha_fin: datetime,
+        agrupar_por: str,
+        nivel_urgencia: str | None,
+        categoria_incidente: str | None,
+        estado_solicitud: str | None,
+        estado_asignacion: str | None,
+        estado_resultado: str | None,
+    ) -> ReporteFiltradoTaller:
+        valid_groups = {
+            "dia",
+            "semana",
+            "mes",
+            "categoria",
+            "urgencia",
+            "estado_solicitud",
+            "estado_asignacion",
+            "estado_resultado",
+        }
+        group_mode = agrupar_por if agrupar_por in valid_groups else "dia"
+
+        if not asignaciones:
+            return ReporteFiltradoTaller(
+                filtros_aplicados=FiltroReporteAplicado(
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin,
+                    agrupar_por=group_mode,
+                    nivel_urgencia=nivel_urgencia,
+                    categoria_incidente=categoria_incidente,
+                    estado_solicitud=estado_solicitud,
+                    estado_asignacion=estado_asignacion,
+                    estado_resultado=estado_resultado,
+                ),
+                tabla=[],
+                graficos=ReporteGraficos(
+                    categorias=[],
+                    serie_total_solicitudes=[],
+                    serie_solicitudes_atendidas=[],
+                    serie_solicitudes_canceladas=[],
+                    serie_servicios_completados=[],
+                ),
+            )
+
+        solicitud_ids = [a.id_solicitud for a in asignaciones]
+        solicitud_map = {
+            s.id_solicitud: s
+            for s in db.query(SolicitudEmergencia)
+            .filter(SolicitudEmergencia.id_solicitud.in_(solicitud_ids))
+            .all()
+        }
+
+        resultados = (
+            db.query(ResultadoServicio.id_asignacion, ResultadoServicio.estado_resultado)
+            .filter(
+                ResultadoServicio.id_asignacion.in_(
+                    [a.id_asignacion for a in asignaciones]
+                )
+            )
+            .all()
+        )
+        estados_resultado_por_asignacion: dict = defaultdict(set)
+        for id_asignacion, estado in resultados:
+            estados_resultado_por_asignacion[id_asignacion].add(
+                estado.value if hasattr(estado, "value") else str(estado)
+            )
+
+        grupos: dict[str, dict[str, int]] = defaultdict(
+            lambda: {
+                "total_solicitudes": 0,
+                "solicitudes_atendidas": 0,
+                "solicitudes_canceladas": 0,
+                "servicios_completados": 0,
+            }
+        )
+
+        for asignacion in asignaciones:
+            solicitud = solicitud_map.get(asignacion.id_solicitud)
+            if not solicitud:
+                continue
+
+            estados_resultado = estados_resultado_por_asignacion.get(
+                asignacion.id_asignacion, set()
+            )
+            grupo = EstadisticasTallerService._obtener_grupo(
+                asignacion=asignacion,
+                solicitud=solicitud,
+                estados_resultado=estados_resultado,
+                agrupar_por=group_mode,
+            )
+
+            item = grupos[grupo]
+            item["total_solicitudes"] += 1
+            if solicitud.estado_actual == EstadoSolicitud.ATENDIDA:
+                item["solicitudes_atendidas"] += 1
+            if solicitud.estado_actual == EstadoSolicitud.CANCELADA:
+                item["solicitudes_canceladas"] += 1
+            if EstadoResultado.RESUELTO.value in estados_resultado:
+                item["servicios_completados"] += 1
+
+        tabla: list[ReporteTablaItem] = []
+        for grupo, data in sorted(grupos.items(), key=lambda item: item[0]):
+            total = data["total_solicitudes"]
+            tabla.append(
+                ReporteTablaItem(
+                    grupo=grupo,
+                    total_solicitudes=total,
+                    solicitudes_atendidas=data["solicitudes_atendidas"],
+                    solicitudes_canceladas=data["solicitudes_canceladas"],
+                    servicios_completados=data["servicios_completados"],
+                    tasa_completacion=(
+                        round((data["servicios_completados"] / total) * 100, 2)
+                        if total > 0
+                        else 0
+                    ),
+                )
+            )
+
+        return ReporteFiltradoTaller(
+            filtros_aplicados=FiltroReporteAplicado(
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                agrupar_por=group_mode,
+                nivel_urgencia=nivel_urgencia,
+                categoria_incidente=categoria_incidente,
+                estado_solicitud=estado_solicitud,
+                estado_asignacion=estado_asignacion,
+                estado_resultado=estado_resultado,
+            ),
+            tabla=tabla,
+            graficos=ReporteGraficos(
+                categorias=[item.grupo for item in tabla],
+                serie_total_solicitudes=[item.total_solicitudes for item in tabla],
+                serie_solicitudes_atendidas=[item.solicitudes_atendidas for item in tabla],
+                serie_solicitudes_canceladas=[item.solicitudes_canceladas for item in tabla],
+                serie_servicios_completados=[item.servicios_completados for item in tabla],
+            ),
+        )
+
+    @staticmethod
+    def _obtener_grupo(
+        asignacion: AsignacionAtencion,
+        solicitud: SolicitudEmergencia,
+        estados_resultado: set[str],
+        agrupar_por: str,
+    ) -> str:
+        fecha = asignacion.fecha_asignacion
+
+        if agrupar_por == "semana":
+            iso_year, iso_week, _ = fecha.isocalendar()
+            return f"{iso_year}-W{iso_week:02d}"
+        if agrupar_por == "mes":
+            return fecha.strftime("%Y-%m")
+        if agrupar_por == "categoria":
+            return (solicitud.categoria_incidente or "SIN_CATEGORIA").upper()
+        if agrupar_por == "urgencia":
+            return (
+                solicitud.nivel_urgencia.value
+                if hasattr(solicitud.nivel_urgencia, "value")
+                else str(solicitud.nivel_urgencia)
+            )
+        if agrupar_por == "estado_solicitud":
+            return (
+                solicitud.estado_actual.value
+                if hasattr(solicitud.estado_actual, "value")
+                else str(solicitud.estado_actual)
+            )
+        if agrupar_por == "estado_asignacion":
+            return (
+                asignacion.estado_asignacion.value
+                if hasattr(asignacion.estado_asignacion, "value")
+                else str(asignacion.estado_asignacion)
+            )
+        if agrupar_por == "estado_resultado":
+            if not estados_resultado:
+                return "SIN_RESULTADO"
+            if EstadoResultado.RESUELTO.value in estados_resultado:
+                return EstadoResultado.RESUELTO.value
+            if EstadoResultado.PARCIAL.value in estados_resultado:
+                return EstadoResultado.PARCIAL.value
+            return EstadoResultado.PENDIENTE.value
+
+        return fecha.strftime("%Y-%m-%d")
 
     @staticmethod
     def _calcular_diagnosticos(
         db: Session, asignaciones: list[AsignacionAtencion]
     ) -> tuple[list[EstadisticaDiagnostico], int]:
-        """Calcula los diagnósticos más frecuentes y cuántos requieren seguimiento"""
         asignacion_ids = [a.id_asignacion for a in asignaciones]
 
         if not asignacion_ids:
             return [], 0
 
-        # Agrupar por diagnóstico en ResultadoServicio
         resultados = (
             db.query(
                 ResultadoServicio.diagnostico,
                 func.count(ResultadoServicio.id_resultado_servicio).label("cantidad"),
-                func.sum(
-                    cast(ResultadoServicio.requiere_seguimiento, Integer)
-                ).label("con_seguimiento"),
+                func.sum(cast(ResultadoServicio.requiere_seguimiento, Integer)).label(
+                    "con_seguimiento"
+                ),
             )
             .filter(ResultadoServicio.id_asignacion.in_(asignacion_ids))
             .group_by(ResultadoServicio.diagnostico)
             .order_by(func.count(ResultadoServicio.id_resultado_servicio).desc())
-            .limit(10)  # Top 10
+            .limit(10)
             .all()
         )
 
-        total_resultados = len(asignacion_ids)  # Aproximación: número de asignaciones
+        total_resultados = len(asignacion_ids)
         diagnosticos = []
         total_con_seguimiento = 0
 
         for diagnostico_text, cantidad, seguimiento_count in resultados:
-            if diagnostico_text:  # Solo si hay diagnóstico
+            if diagnostico_text:
                 seguimiento = int(seguimiento_count) if seguimiento_count else 0
                 total_con_seguimiento += seguimiento
-                porcentaje = (cantidad / total_resultados * 100) if total_resultados > 0 else 0
+                porcentaje = (
+                    (cantidad / total_resultados * 100) if total_resultados > 0 else 0
+                )
                 diagnosticos.append(
                     EstadisticaDiagnostico(
-                        diagnostico=diagnostico_text[:50],  # Limitar a 50 caracteres para UI
+                        diagnostico=diagnostico_text[:50],
                         cantidad=cantidad,
                         porcentaje=round(porcentaje, 2),
                         requiere_seguimiento=seguimiento,
@@ -159,7 +468,6 @@ class EstadisticasTallerService:
     def _calcular_dias_mayor_demanda(
         asignaciones: list[AsignacionAtencion],
     ) -> list[EstadisticaDemacruzada]:
-        """Calcula los días con mayor demanda"""
         dias_count = {}
 
         for asignacion in asignaciones:
@@ -167,7 +475,6 @@ class EstadisticasTallerService:
             dia_str = dia.isoformat()
             dias_count[dia_str] = dias_count.get(dia_str, 0) + 1
 
-        # Ordenar por cantidad descendente y tomar top 10
         dias_ordenados = sorted(dias_count.items(), key=lambda x: x[1], reverse=True)[:10]
 
         return [
@@ -179,7 +486,6 @@ class EstadisticasTallerService:
     def _calcular_horas_mayor_demanda(
         asignaciones: list[AsignacionAtencion],
     ) -> list[EstadisticaDemacruzada]:
-        """Calcula las horas con mayor demanda"""
         horas_count = {}
 
         for asignacion in asignaciones:
@@ -187,7 +493,6 @@ class EstadisticasTallerService:
             hora_str = f"{hora:02d}:00"
             horas_count[hora_str] = horas_count.get(hora_str, 0) + 1
 
-        # Ordenar por cantidad descendente y tomar top 10
         horas_ordenadas = sorted(horas_count.items(), key=lambda x: x[1], reverse=True)[:10]
 
         return [
@@ -199,13 +504,12 @@ class EstadisticasTallerService:
     def _calcular_tiempo_promedio_atencion(
         asignaciones: list[AsignacionAtencion],
     ) -> EstadisticaTiempoAtencion:
-        """Calcula el tiempo promedio de atención"""
         tiempos = []
 
         for asignacion in asignaciones:
             if asignacion.fecha_inicio_atencion and asignacion.fecha_fin_atencion:
                 duracion = asignacion.fecha_fin_atencion - asignacion.fecha_inicio_atencion
-                tiempos.append(duracion.total_seconds() / 60)  # Convertir a minutos
+                tiempos.append(duracion.total_seconds() / 60)
 
         if not tiempos:
             return EstadisticaTiempoAtencion(
@@ -224,13 +528,11 @@ class EstadisticasTallerService:
     def _contar_asignaciones_completadas(
         db: Session, asignaciones: list[AsignacionAtencion]
     ) -> int:
-        """Cuenta las asignaciones que tienen al menos un resultado resuelto"""
         asignacion_ids = [a.id_asignacion for a in asignaciones]
 
         if not asignacion_ids:
             return 0
 
-        # Contar asignaciones únicas que tienen al menos un resultado RESUELTO
         completadas = (
             db.query(func.count(func.distinct(ResultadoServicio.id_asignacion)))
             .filter(

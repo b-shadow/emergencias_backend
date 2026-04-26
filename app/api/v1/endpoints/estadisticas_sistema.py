@@ -24,6 +24,14 @@ def obtener_estadisticas_sistema(
     current_user: Usuario = Depends(require_roles(RolUsuario.ADMINISTRADOR)),
     fecha_inicio: datetime | None = Query(None, description="Fecha de inicio del rango (YYYY-MM-DD)"),
     fecha_fin: datetime | None = Query(None, description="Fecha de fin del rango (YYYY-MM-DD)"),
+    agrupar_por: str = Query(
+        "dia",
+        description="Agrupacion del reporte: dia|semana|mes|categoria|urgencia|estado|taller",
+    ),
+    nivel_urgencia: str | None = Query(None, description="Filtro por urgencia"),
+    categoria_incidente: str | None = Query(None, description="Filtro por categoria"),
+    estado_solicitud: str | None = Query(None, description="Filtro por estado de solicitud"),
+    id_taller: str | None = Query(None, description="Filtro por id de taller"),
 ):
     """
     Obtiene estadísticas generales del sistema:
@@ -45,6 +53,11 @@ def obtener_estadisticas_sistema(
         db=db,
         fecha_inicio=fecha_inicio,
         fecha_fin=fecha_fin,
+        agrupar_por=agrupar_por,
+        nivel_urgencia=nivel_urgencia,
+        categoria_incidente=categoria_incidente,
+        estado_solicitud=estado_solicitud,
+        id_taller=id_taller,
     )
 
     # Nota: BitacoraService.registrar() no existe, comentado por ahora
