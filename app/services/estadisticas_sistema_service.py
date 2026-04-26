@@ -2,19 +2,18 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import and_, desc, func
+from sqlalchemy import and_
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.enums import EstadoResultado, EstadoSolicitud
+from app.core.enums import EstadoResultado, EstadoSolicitud, NivelUrgencia
 from app.models.asignacion_atencion import AsignacionAtencion
-from app.models.cliente import Cliente
-from app.models.resultado_servicio import ResultadoServicio
 from app.models.solicitud_emergencia import SolicitudEmergencia
 from app.models.taller import Taller
 from app.schemas.estadisticas_sistema import (
     EstadisticasGeneralesResponse,
     FiltroReporteSistemaAplicado,
     IncidenteFrequente,
+    OpcionesFiltrosSistema,
     ReporteFiltradoSistema,
     ReporteGraficosSistema,
     ReporteTablaSistemaItem,
@@ -52,12 +51,13 @@ class EstadisticasSistemaService:
             "id_taller": id_taller.strip() if id_taller else None,
         }
 
-        solicitudes = (
+        base_solicitudes = (
             db.query(SolicitudEmergencia)
             .options(
                 selectinload(SolicitudEmergencia.asignaciones).selectinload(
                     AsignacionAtencion.resultados
-                )
+                ),
+                selectinload(SolicitudEmergencia.cliente),
             )
             .filter(
                 and_(
@@ -68,8 +68,18 @@ class EstadisticasSistemaService:
             .all()
         )
 
+        talleres_catalogo = {
+            str(t.id_taller): t.nombre_taller
+            for t in db.query(Taller.id_taller, Taller.nombre_taller).all()
+        }
+
+        opciones_filtros = EstadisticasSistemaService._build_filter_options(
+            base_solicitudes=base_solicitudes,
+            talleres_catalogo=talleres_catalogo,
+        )
+
         solicitudes = EstadisticasSistemaService._aplicar_filtros_solicitudes(
-            solicitudes=solicitudes,
+            solicitudes=base_solicitudes,
             nivel_urgencia=filtros["nivel_urgencia"],
             categoria_incidente=filtros["categoria_incidente"],
             estado_solicitud=filtros["estado_solicitud"],
@@ -85,39 +95,31 @@ class EstadisticasSistemaService:
             categoria_incidente=filtros["categoria_incidente"],
             estado_solicitud=filtros["estado_solicitud"],
             id_taller=filtros["id_taller"],
+            talleres_catalogo=talleres_catalogo,
         )
 
         total_emergencias = len(solicitudes)
-
         solicitudes_atendidas = sum(
             1 for s in solicitudes if s.estado_actual == EstadoSolicitud.ATENDIDA
         )
 
         total_servicios = sum(
-            len(
-                [
-                    r
-                    for a in s.asignaciones
-                    for r in a.resultados
-                    if r.fecha_registro and fecha_inicio <= r.fecha_registro <= fecha_fin
-                ]
-            )
-            for s in solicitudes
+            len([r for a in s.asignaciones for r in a.resultados]) for s in solicitudes
         )
 
-        talleres_activos_ids = {
-            str(a.id_taller)
-            for s in solicitudes
-            for a in s.asignaciones
-            if a.fecha_asignacion and fecha_inicio <= a.fecha_asignacion <= fecha_fin
-        }
-        talleres_activos = len(talleres_activos_ids)
+        talleres_activos = len(
+            {
+                str(a.id_taller)
+                for s in solicitudes
+                for a in s.asignaciones
+            }
+        )
 
         clientes_activos = len({str(s.id_cliente) for s in solicitudes})
 
         incidentes_count: dict[str, int] = defaultdict(int)
         for solicitud in solicitudes:
-            key = (solicitud.categoria_incidente or "Sin especificar").upper()
+            key = (solicitud.categoria_incidente or "SIN_CATEGORIA").upper()
             incidentes_count[key] += 1
 
         incidentes_frecuentes = []
@@ -133,10 +135,6 @@ class EstadisticasSistemaService:
                 )
             )
 
-        tallers_map = {
-            str(t.id_taller): t.nombre_taller
-            for t in db.query(Taller.id_taller, Taller.nombre_taller).all()
-        }
         taller_metricas: dict[str, dict[str, int]] = defaultdict(
             lambda: {"solicitudes": 0, "servicios": 0}
         )
@@ -148,7 +146,7 @@ class EstadisticasSistemaService:
 
         talleres_top = [
             TallerActividad(
-                nombre_taller=tallers_map.get(taller_id, "Taller"),
+                nombre_taller=talleres_catalogo.get(taller_id, "Taller"),
                 solicitudes_atendidas=data["solicitudes"],
                 servicios_realizados=data["servicios"],
                 calificacion_promedio=None,
@@ -160,10 +158,7 @@ class EstadisticasSistemaService:
 
         zonas_count: dict[str, int] = defaultdict(int)
         for solicitud in solicitudes:
-            zona = None
-            if solicitud.cliente and solicitud.cliente.direccion:
-                zona = solicitud.cliente.direccion
-            zona = zona or "Sin especificar"
+            zona = solicitud.cliente.direccion if solicitud.cliente and solicitud.cliente.direccion else "Sin especificar"
             zonas_count[zona] += 1
 
         zonas_criticas = [
@@ -177,13 +172,13 @@ class EstadisticasSistemaService:
             )[:5]
         ]
 
-        tiempos_minutos = []
+        tiempos_minutos: list[float] = []
         for solicitud in solicitudes:
             for asignacion in solicitud.asignaciones:
                 if solicitud.fecha_creacion and asignacion.fecha_asignacion:
-                    minutos = (
-                        asignacion.fecha_asignacion - solicitud.fecha_creacion
-                    ).total_seconds() / 60
+                    inicio = EstadisticasSistemaService._normalize_dt(solicitud.fecha_creacion)
+                    asignada = EstadisticasSistemaService._normalize_dt(asignacion.fecha_asignacion)
+                    minutos = (asignada - inicio).total_seconds() / 60
                     if minutos >= 0:
                         tiempos_minutos.append(minutos)
 
@@ -234,7 +229,63 @@ class EstadisticasSistemaService:
             solicitudes_pendientes=solicitudes_pendientes,
             solicitudes_canceladas=solicitudes_canceladas,
             reporte=reporte,
+            opciones_filtros=opciones_filtros,
             mensaje_vacio=mensaje_vacio,
+        )
+
+    @staticmethod
+    def _normalize_dt(value: datetime) -> datetime:
+        if value.tzinfo is not None:
+            return value.replace(tzinfo=None)
+        return value
+
+    @staticmethod
+    def _build_filter_options(
+        base_solicitudes: list[SolicitudEmergencia],
+        talleres_catalogo: dict[str, str],
+    ) -> OpcionesFiltrosSistema:
+        urgencias = sorted(
+            {
+                s.nivel_urgencia.value if hasattr(s.nivel_urgencia, "value") else str(s.nivel_urgencia)
+                for s in base_solicitudes
+                if s.nivel_urgencia
+            }
+        )
+        if not urgencias:
+            urgencias = [item.value for item in NivelUrgencia]
+
+        categorias = sorted(
+            {
+                (s.categoria_incidente or "").upper()
+                for s in base_solicitudes
+                if s.categoria_incidente
+            }
+        )
+
+        estados_solicitud = sorted(
+            {
+                s.estado_actual.value if hasattr(s.estado_actual, "value") else str(s.estado_actual)
+                for s in base_solicitudes
+                if s.estado_actual
+            }
+        )
+
+        taller_ids = {
+            str(a.id_taller)
+            for s in base_solicitudes
+            for a in s.asignaciones
+            if a.id_taller
+        }
+        talleres = [
+            {"id_taller": tid, "nombre_taller": talleres_catalogo.get(tid, "Taller")}
+            for tid in sorted(taller_ids)
+        ]
+
+        return OpcionesFiltrosSistema(
+            urgencias=urgencias,
+            categorias_incidente=categorias,
+            estados_solicitud=estados_solicitud,
+            talleres=talleres,
         )
 
     @staticmethod
@@ -282,16 +333,9 @@ class EstadisticasSistemaService:
         categoria_incidente: Optional[str],
         estado_solicitud: Optional[str],
         id_taller: Optional[str],
+        talleres_catalogo: dict[str, str],
     ) -> ReporteFiltradoSistema:
-        valid_groups = {
-            "dia",
-            "semana",
-            "mes",
-            "categoria",
-            "urgencia",
-            "estado",
-            "taller",
-        }
+        valid_groups = {"dia", "semana", "mes", "categoria", "urgencia", "estado", "taller"}
         group_mode = agrupar_por if agrupar_por in valid_groups else "dia"
 
         grupos: dict[str, dict[str, int]] = defaultdict(
@@ -304,7 +348,11 @@ class EstadisticasSistemaService:
         )
 
         for solicitud in solicitudes:
-            grupo = EstadisticasSistemaService._obtener_grupo_sistema(solicitud, group_mode)
+            grupo = EstadisticasSistemaService._obtener_grupo_sistema(
+                solicitud=solicitud,
+                agrupar_por=group_mode,
+                talleres_catalogo=talleres_catalogo,
+            )
             item = grupos[grupo]
             item["total_solicitudes"] += 1
             if solicitud.estado_actual == EstadoSolicitud.ATENDIDA:
@@ -359,8 +407,12 @@ class EstadisticasSistemaService:
         )
 
     @staticmethod
-    def _obtener_grupo_sistema(solicitud: SolicitudEmergencia, agrupar_por: str) -> str:
-        fecha = solicitud.fecha_creacion
+    def _obtener_grupo_sistema(
+        solicitud: SolicitudEmergencia,
+        agrupar_por: str,
+        talleres_catalogo: dict[str, str],
+    ) -> str:
+        fecha = EstadisticasSistemaService._normalize_dt(solicitud.fecha_creacion)
 
         if agrupar_por == "semana":
             iso_year, iso_week, _ = fecha.isocalendar()
@@ -384,6 +436,7 @@ class EstadisticasSistemaService:
         if agrupar_por == "taller":
             if not solicitud.asignaciones:
                 return "SIN_TALLER"
-            return str(solicitud.asignaciones[0].id_taller)
+            taller_id = str(solicitud.asignaciones[0].id_taller)
+            return talleres_catalogo.get(taller_id, taller_id)
 
         return fecha.strftime("%Y-%m-%d")

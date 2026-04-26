@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import Integer, and_, cast, func
 from sqlalchemy.orm import Session
 
-from app.core.enums import EstadoAsignacion, EstadoResultado, EstadoSolicitud
+from app.core.enums import EstadoAsignacion, EstadoResultado, EstadoSolicitud, NivelUrgencia
 from app.models.asignacion_atencion import AsignacionAtencion
 from app.models.resultado_servicio import ResultadoServicio
 from app.models.solicitud_emergencia import SolicitudEmergencia
@@ -16,6 +16,7 @@ from app.schemas.estadisticas_taller import (
     EstadisticaTiempoAtencion,
     EstadisticasTallerResponse,
     FiltroReporteAplicado,
+    OpcionesFiltrosTaller,
     ReporteFiltradoTaller,
     ReporteGraficos,
     ReporteTablaItem,
@@ -50,10 +51,17 @@ class EstadisticasTallerService:
                 nombre_taller="Desconocido",
                 estadisticas=None,
                 reporte=None,
+                opciones_filtros=OpcionesFiltrosTaller(
+                    urgencias=[item.value for item in NivelUrgencia],
+                    categorias_incidente=[],
+                    estados_solicitud=[item.value for item in EstadoSolicitud],
+                    estados_asignacion=[item.value for item in EstadoAsignacion],
+                    estados_resultado=[item.value for item in EstadoResultado],
+                ),
                 mensaje_vacio="Taller no encontrado",
             )
 
-        asignaciones = (
+        base_asignaciones = (
             db.query(AsignacionAtencion)
             .filter(
                 and_(
@@ -63,6 +71,11 @@ class EstadisticasTallerService:
                 )
             )
             .all()
+        )
+
+        opciones_filtros = EstadisticasTallerService._build_filter_options(
+            db=db,
+            asignaciones=base_asignaciones,
         )
 
         filtros = {
@@ -79,7 +92,7 @@ class EstadisticasTallerService:
 
         asignaciones = EstadisticasTallerService._aplicar_filtros_asignaciones(
             db=db,
-            asignaciones=asignaciones,
+            asignaciones=base_asignaciones,
             nivel_urgencia=filtros["nivel_urgencia"],
             categoria_incidente=filtros["categoria_incidente"],
             estado_solicitud=filtros["estado_solicitud"],
@@ -106,6 +119,7 @@ class EstadisticasTallerService:
                 nombre_taller=taller.nombre_taller,
                 estadisticas=None,
                 reporte=reporte,
+                opciones_filtros=opciones_filtros,
                 mensaje_vacio="No existen datos suficientes para generar estadisticas en el rango seleccionado.",
             )
 
@@ -152,6 +166,90 @@ class EstadisticasTallerService:
             nombre_taller=taller.nombre_taller,
             estadisticas=estadisticas,
             reporte=reporte,
+            opciones_filtros=opciones_filtros,
+        )
+
+    @staticmethod
+    def _build_filter_options(
+        db: Session,
+        asignaciones: list[AsignacionAtencion],
+    ) -> OpcionesFiltrosTaller:
+        if not asignaciones:
+            return OpcionesFiltrosTaller(
+                urgencias=[item.value for item in NivelUrgencia],
+                categorias_incidente=[],
+                estados_solicitud=[item.value for item in EstadoSolicitud],
+                estados_asignacion=[item.value for item in EstadoAsignacion],
+                estados_resultado=[item.value for item in EstadoResultado],
+            )
+
+        solicitud_ids = [a.id_solicitud for a in asignaciones]
+        solicitud_map = {
+            s.id_solicitud: s
+            for s in db.query(SolicitudEmergencia)
+            .filter(SolicitudEmergencia.id_solicitud.in_(solicitud_ids))
+            .all()
+        }
+
+        urgencias = sorted(
+            {
+                solicitud.nivel_urgencia.value
+                if hasattr(solicitud.nivel_urgencia, "value")
+                else str(solicitud.nivel_urgencia)
+                for solicitud in solicitud_map.values()
+                if solicitud.nivel_urgencia
+            }
+        )
+        if not urgencias:
+            urgencias = [item.value for item in NivelUrgencia]
+
+        categorias = sorted(
+            {
+                (solicitud.categoria_incidente or "").upper()
+                for solicitud in solicitud_map.values()
+                if solicitud.categoria_incidente
+            }
+        )
+
+        estados_solicitud = sorted(
+            {
+                solicitud.estado_actual.value
+                if hasattr(solicitud.estado_actual, "value")
+                else str(solicitud.estado_actual)
+                for solicitud in solicitud_map.values()
+                if solicitud.estado_actual
+            }
+        )
+
+        estados_asignacion = sorted(
+            {
+                asignacion.estado_asignacion.value
+                if hasattr(asignacion.estado_asignacion, "value")
+                else str(asignacion.estado_asignacion)
+                for asignacion in asignaciones
+                if asignacion.estado_asignacion
+            }
+        )
+
+        resultados = (
+            db.query(ResultadoServicio.estado_resultado)
+            .filter(ResultadoServicio.id_asignacion.in_([a.id_asignacion for a in asignaciones]))
+            .all()
+        )
+        estados_resultado = sorted(
+            {
+                estado.value if hasattr(estado, "value") else str(estado)
+                for (estado,) in resultados
+                if estado
+            }
+        )
+
+        return OpcionesFiltrosTaller(
+            urgencias=urgencias,
+            categorias_incidente=categorias,
+            estados_solicitud=estados_solicitud,
+            estados_asignacion=estados_asignacion,
+            estados_resultado=estados_resultado,
         )
 
     @staticmethod
@@ -178,9 +276,7 @@ class EstadisticasTallerService:
         resultados = (
             db.query(ResultadoServicio.id_asignacion, ResultadoServicio.estado_resultado)
             .filter(
-                ResultadoServicio.id_asignacion.in_(
-                    [a.id_asignacion for a in asignaciones]
-                )
+                ResultadoServicio.id_asignacion.in_([a.id_asignacion for a in asignaciones])
             )
             .all()
         )
@@ -289,9 +385,7 @@ class EstadisticasTallerService:
         resultados = (
             db.query(ResultadoServicio.id_asignacion, ResultadoServicio.estado_resultado)
             .filter(
-                ResultadoServicio.id_asignacion.in_(
-                    [a.id_asignacion for a in asignaciones]
-                )
+                ResultadoServicio.id_asignacion.in_([a.id_asignacion for a in asignaciones])
             )
             .all()
         )

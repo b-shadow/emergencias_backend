@@ -3,34 +3,30 @@ from pydantic import BaseModel
 
 
 class EstadisticaDiagnostico(BaseModel):
-    """Estadística de diagnóstico más frecuente"""
     diagnostico: str
     cantidad: int
     porcentaje: float
-    requiere_seguimiento: int  # Cantidad que requiere seguimiento
+    requiere_seguimiento: int
 
 
 class EstadisticaDemacruzada(BaseModel):
-    """Estadística de demanda (día u hora)"""
-    periodo: str  # Ej: "2024-04-12" o "14:00"
+    periodo: str
     cantidad: int
 
 
 class EstadisticaTiempoAtencion(BaseModel):
-    """Estadística de tiempo promedio de atención"""
     tiempo_promedio_minutos: float
     tiempo_minimo_minutos: float
     tiempo_maximo_minutos: float
 
 
 class EstadisticaGeneralTaller(BaseModel):
-    """Estadística general del taller"""
     fecha_inicio: datetime
     fecha_fin: datetime
     total_solicitudes_atendidas: int
     total_solicitudes_canceladas: int
     total_servicios_completados: int
-    tasa_completacion: float  # Porcentaje
+    tasa_completacion: float
     diagnosticos: list[EstadisticaDiagnostico]
     total_diagnosticos_con_seguimiento: int
     dias_mayor_demanda: list[EstadisticaDemacruzada]
@@ -71,10 +67,19 @@ class ReporteFiltradoTaller(BaseModel):
     tabla: list[ReporteTablaItem]
     graficos: ReporteGraficos
 
+
+class OpcionesFiltrosTaller(BaseModel):
+    urgencias: list[str]
+    categorias_incidente: list[str]
+    estados_solicitud: list[str]
+    estados_asignacion: list[str]
+    estados_resultado: list[str]
+
+
 class EstadisticasTallerResponse(BaseModel):
-    """Respuesta con todas las estadísticas del taller"""
     id_taller: str
     nombre_taller: str
-    estadisticas: EstadisticaGeneralTaller
+    estadisticas: EstadisticaGeneralTaller | None = None
     reporte: ReporteFiltradoTaller | None = None
-    mensaje_vacio: str | None = None  # Mensaje si no hay datos
+    opciones_filtros: OpcionesFiltrosTaller | None = None
+    mensaje_vacio: str | None = None
