@@ -1,0 +1,36 @@
+{
+  "categories": [
+    {
+      "code": "PINCHAZO_LLANTA",
+      "keywords": ["pinchazo", "llanta baja", "neumatico", "goma", "reventon", "desinflada"]
+    },
+    {
+      "code": "BATERIA_DESCARGADA",
+      "keywords": ["bateria", "no enciende", "sin corriente", "no arranca", "paso corriente"]
+    },
+    {
+      "code": "FALLA_FRENOS",
+      "keywords": ["frenos", "no frena", "pedal al fondo", "sin freno", "freno duro"]
+    },
+    {
+      "code": "RECALENTAMIENTO_MOTOR",
+      "keywords": ["recalentamiento", "temperatura alta", "vapor", "motor caliente", "humo capot"]
+    },
+    {
+      "code": "COLISION_VISIBLE",
+      "keywords": ["choque", "colision", "accidente", "impacto", "golpe fuerte"]
+    },
+    {
+      "code": "FUGA_COMBUSTIBLE",
+      "keywords": ["fuga gasolina", "olor gasolina", "combustible derramado", "tanque", "goteo gasolina"]
+    },
+    {
+      "code": "FALLA_DIRECCION",
+      "keywords": ["direccion dura", "volante trabado", "no gira", "direccion no responde"]
+    },
+    {
+      "code": "FALLA_ELECTRICA",
+      "keywords": ["fusible", "luces apagadas", "electrico", "corto", "tablero apagado"]
+    }
+  ]
+}

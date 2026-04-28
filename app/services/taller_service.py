@@ -15,9 +15,40 @@ from app.core.exceptions import not_found, forbidden, bad_request
 from app.models.taller import Taller
 from app.models.usuario import Usuario
 from app.models.bitacora import Bitacora
+from app.core.logging import logger
 
 
 class TallerService:
+    @staticmethod
+    def _notify_taller_safe(
+        db: Session,
+        id_usuario_destino: UUID,
+        titulo: str,
+        mensaje: str,
+        referencia_id: UUID,
+    ) -> None:
+        """
+        Envía notificación al taller sin romper el flujo principal.
+        Si falla el push/notificación, solo se registra en log.
+        """
+        from app.core.enums import TipoNotificacion, CategoriaNotificacion
+        from app.services.notificacion_service import NotificacionService
+
+        try:
+            NotificacionService.send_notification_to_user(
+                db=db,
+                id_usuario_destino=id_usuario_destino,
+                tipo_usuario_destino="TALLER",
+                titulo=titulo,
+                mensaje=mensaje,
+                tipo_notificacion=TipoNotificacion.PUSH,
+                categoria_evento=CategoriaNotificacion.CUENTA,
+                referencia_entidad="Taller",
+                referencia_id=referencia_id,
+            )
+        except Exception as e:
+            logger.error(f"[TALLER] Error enviando notificación (no bloqueante): {e}")
+
     @staticmethod
     def get_taller_by_usuario_id(db: Session, usuario_id: UUID) -> Taller | None:
         """
@@ -319,20 +350,12 @@ class TallerService:
             detalle=f"Taller '{taller.nombre_taller}' aprobado. Usuario activado.",
         )
         
-        # Notificar al taller de su aprobación
-        from app.core.enums import TipoNotificacion, CategoriaNotificacion
-        from app.services.notificacion_service import NotificacionService
-        
         if taller.id_usuario:
-            NotificacionService.send_notification_to_user(
+            TallerService._notify_taller_safe(
                 db=db,
                 id_usuario_destino=taller.id_usuario,
-                tipo_usuario_destino="TALLER",
                 titulo="¡Tu taller ha sido aprobado!",
                 mensaje=f"Felicidades {taller.nombre_taller}, tu solicitud de registro ha sido aprobada por el administrador. Ya puedes operar y recibir solicitudes de emergencia.",
-                tipo_notificacion=TipoNotificacion.PUSH,
-                categoria_evento=CategoriaNotificacion.CUENTA,
-                referencia_entidad="Taller",
                 referencia_id=taller.id_taller,
             )
         
@@ -456,20 +479,12 @@ class TallerService:
             detalle=f"Taller '{taller.nombre_taller}' habilitado para operar.",
         )
         
-        # Notificar al taller del levantamiento de suspensión
-        from app.core.enums import TipoNotificacion, CategoriaNotificacion
-        from app.services.notificacion_service import NotificacionService
-        
         if usuario:
-            NotificacionService.send_notification_to_user(
+            TallerService._notify_taller_safe(
                 db=db,
                 id_usuario_destino=usuario.id_usuario,
-                tipo_usuario_destino="TALLER",
                 titulo="Tu taller ha sido habilitado",
                 mensaje=f"Tu taller {taller.nombre_taller} ha sido habilitado nuevamente y puede volver a recibir solicitudes de emergencia.",
-                tipo_notificacion=TipoNotificacion.PUSH,
-                categoria_evento=CategoriaNotificacion.CUENTA,
-                referencia_entidad="Taller",
                 referencia_id=taller.id_taller,
             )
         
@@ -516,20 +531,12 @@ class TallerService:
             detalle=f"Taller '{taller.nombre_taller}' deshabilitado. Estado operativo: SUSPENDIDO.",
         )
         
-        # Notificar al taller de la suspensión
-        from app.core.enums import TipoNotificacion, CategoriaNotificacion
-        from app.services.notificacion_service import NotificacionService
-        
         if taller.usuario and taller.usuario.id_usuario:
-            NotificacionService.send_notification_to_user(
+            TallerService._notify_taller_safe(
                 db=db,
                 id_usuario_destino=taller.usuario.id_usuario,
-                tipo_usuario_destino="TALLER",
                 titulo="Tu taller ha sido suspendido",
                 mensaje=f"Tu taller {taller.nombre_taller} ha sido suspendido y no puede recibir nuevas solicitudes de emergencia. Por favor contacta con el administrador.",
-                tipo_notificacion=TipoNotificacion.PUSH,
-                categoria_evento=CategoriaNotificacion.CUENTA,
-                referencia_entidad="Taller",
                 referencia_id=taller.id_taller,
             )
         

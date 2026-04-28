@@ -1,0 +1,32 @@
+{
+  "symptoms": [
+    {
+      "symptom": "ruido",
+      "related_areas": ["motor", "suspension", "frenos", "transmision"]
+    },
+    {
+      "symptom": "humo",
+      "related_areas": ["motor", "combustible", "electrico"]
+    },
+    {
+      "symptom": "olor a gasolina",
+      "related_areas": ["combustible", "inyeccion", "mangueras"]
+    },
+    {
+      "symptom": "vibracion",
+      "related_areas": ["llantas", "direccion", "suspension", "eje"]
+    },
+    {
+      "symptom": "no enciende",
+      "related_areas": ["bateria", "arranque", "combustible", "electrico"]
+    },
+    {
+      "symptom": "se apaga",
+      "related_areas": ["combustible", "sensores", "encendido", "inyeccion"]
+    }
+  ],
+  "context_modifiers": {
+    "high_risk_locations": ["carretera", "curva", "puente", "tunel", "zona insegura"],
+    "vulnerable_people": ["ninos", "adulto mayor", "embarazada", "persona enferma"]
+  }
+}

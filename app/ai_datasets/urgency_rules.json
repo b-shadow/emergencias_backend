@@ -1,0 +1,49 @@
+{
+  "levels": [
+    {
+      "name": "BAJO",
+      "criteria": "Falla leve o preventiva, vehiculo puede moverse y no hay riesgo inmediato.",
+      "signals": [
+        "ruido leve",
+        "vibracion ligera",
+        "check engine encendido",
+        "consumo elevado",
+        "demora en encender",
+        "llanta baja en casa",
+        "fuga leve sin humo"
+      ],
+      "recommended_action": "Revision recomendada; asistencia no urgente o agendar."
+    },
+    {
+      "name": "MEDIO",
+      "criteria": "Falla importante, posible inmovilizacion, sin peligro directo inmediato.",
+      "signals": [
+        "no enciende en lugar seguro",
+        "bateria descargada",
+        "llanta pinchada en via urbana",
+        "motor se apaga ocasionalmente",
+        "recalentamiento sin humo",
+        "direccion dura controlable",
+        "fuga moderada de aceite"
+      ],
+      "recommended_action": "Asistencia necesaria; tecnico o grua segun caso."
+    },
+    {
+      "name": "ALTO",
+      "criteria": "Riesgo inmediato para personas, terceros o el vehiculo.",
+      "signals": [
+        "accidente",
+        "heridos",
+        "fuego",
+        "humo",
+        "olor fuerte a gasolina",
+        "fuga de gasolina",
+        "frenos no responden",
+        "direccion no responde",
+        "vehiculo detenido en carretera",
+        "motor apagado en plena via"
+      ],
+      "recommended_action": "Emergencia prioritaria; asistencia inmediata y posible grua."
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+﻿texto,categoria,urgencia
+"llanta pinchada en mi garaje, el auto igual arranca",PINCHAZO_LLANTA,BAJO
+"se prendio check engine pero el vehiculo sigue normal",FALLA_ELECTRICA,BAJO
+"no enciende en parqueo del trabajo, bateria descargada",BATERIA_DESCARGADA,MEDIO
+"direccion dura pero puedo avanzar despacio en avenida",FALLA_DIRECCION,MEDIO
+"recalentamiento sin humo, tuve que detenerme",RECALENTAMIENTO_MOTOR,MEDIO
+"choque en avenida, no hay heridos pero auto inmovilizado",COLISION_VISIBLE,ALTO
+"olor fuerte a gasolina y goteo debajo del auto",FUGA_COMBUSTIBLE,ALTO
+"frenos no responden en bajada",FALLA_FRENOS,ALTO
+"vibracion leve al frenar en semaforo",FALLA_FRENOS,BAJO
+"ruido metalico al girar a la derecha",FALLA_DIRECCION,MEDIO
+"la bateria se descarga cada noche",BATERIA_DESCARGADA,MEDIO
+"humo blanco ligero al arrancar en frio",RECALENTAMIENTO_MOTOR,BAJO
+"motor tironea al acelerar en subida",FALLA_ELECTRICA,MEDIO
+"pinche una llanta en calle urbana y pude orillarme",PINCHAZO_LLANTA,MEDIO
+"fuga pequena de aceite en el garaje",FALLA_ELECTRICA,BAJO
+"se apago el motor en carretera de noche",FALLA_ELECTRICA,ALTO
+"colision por alcance sin lesionados",COLISION_VISIBLE,ALTO
+"olor a quemado en tablero",FALLA_ELECTRICA,ALTO
+"no arranca despues de cargar gasolina",FUGA_COMBUSTIBLE,MEDIO
+"volante no vuelve al centro",FALLA_DIRECCION,MEDIO
+"pedal de freno muy esponjoso",FALLA_FRENOS,ALTO
+"ruido de llanta y perdida de aire lenta",PINCHAZO_LLANTA,BAJO
+"temperatura sube al prender aire acondicionado",RECALENTAMIENTO_MOTOR,MEDIO
+"sin luces delanteras de noche",FALLA_ELECTRICA,ALTO
+"bateria nueva pero no sostiene carga",BATERIA_DESCARGADA,MEDIO
+"fuga de gasolina cerca del tanque",FUGA_COMBUSTIBLE,ALTO
+"impacto lateral en interseccion",COLISION_VISIBLE,ALTO
+"dirección vibra a 80 km por hora",FALLA_DIRECCION,MEDIO
+"el auto no frena en lluvia",FALLA_FRENOS,ALTO
+"llanta baja al salir de casa",PINCHAZO_LLANTA,BAJO
+"check engine intermitente por la manana",FALLA_ELECTRICA,BAJO
+"recalentamiento con vapor en capot",RECALENTAMIENTO_MOTOR,ALTO
+"fuga moderada de combustible y olor intenso",FUGA_COMBUSTIBLE,ALTO
+"colision con poste en curva",COLISION_VISIBLE,ALTO
+"direccion dura al estacionar",FALLA_DIRECCION,MEDIO
+"frenos chillan pero responden",FALLA_FRENOS,BAJO
+"bateria muerta tras dejar luces encendidas",BATERIA_DESCARGADA,MEDIO
+"pinchazo con rin danado",PINCHAZO_LLANTA,MEDIO
+"humo negro al acelerar fuerte",RECALENTAMIENTO_MOTOR,MEDIO
+"cables sueltos en borne de bateria",BATERIA_DESCARGADA,BAJO
+"choque frontal con derrame de liquidos",COLISION_VISIBLE,ALTO
+"fuga de gasolina sin fuego en parqueo",FUGA_COMBUSTIBLE,ALTO
+"volante se traba por momentos",FALLA_DIRECCION,ALTO
+"pedal de freno se va al fondo",FALLA_FRENOS,ALTO
+"llanta desinflada en estacionamiento",PINCHAZO_LLANTA,BAJO
+"error electrico deja tablero apagado",FALLA_ELECTRICA,ALTO
+"temperatura alta en trafico pesado",RECALENTAMIENTO_MOTOR,MEDIO
+"bateria descargada en zona segura",BATERIA_DESCARGADA,MEDIO
+"golpe por alcance y auto inmovil",COLISION_VISIBLE,ALTO
+"olor a gasolina dentro de cabina",FUGA_COMBUSTIBLE,ALTO
+"direccion con juego excesivo",FALLA_DIRECCION,MEDIO
+"frenos responden tarde",FALLA_FRENOS,ALTO
+"ruido de clavo en neumatico",PINCHAZO_LLANTA,BAJO
+"alternador parece no cargar bateria",BATERIA_DESCARGADA,MEDIO
+"humo y olor a anticongelante",RECALENTAMIENTO_MOTOR,ALTO
+"corto electrico al encender luces",FALLA_ELECTRICA,ALTO
+"colision en avenida con pasajero lesionado",COLISION_VISIBLE,ALTO
+"derrame de gasolina por manguera",FUGA_COMBUSTIBLE,ALTO
+"dirección dura y tironea",FALLA_DIRECCION,ALTO
+"frenos vibran al pisar",FALLA_FRENOS,MEDIO
+"pinchazo leve pero circulable",PINCHAZO_LLANTA,BAJO
+"falla de bateria por bornes sulfatados",BATERIA_DESCARGADA,BAJO
+"sube temperatura en subida larga",RECALENTAMIENTO_MOTOR,MEDIO
+"luces y radio se apagan solos",FALLA_ELECTRICA,MEDIO
+"choque multiple en cruce",COLISION_VISIBLE,ALTO
+"olor fuerte a gasolina despues de cargar",FUGA_COMBUSTIBLE,ALTO
+"volante duro en carretera",FALLA_DIRECCION,ALTO
+"freno de mano no retiene",FALLA_FRENOS,MEDIO
+"llanta pierde aire lentamente",PINCHAZO_LLANTA,BAJO
+"no arranca por bateria agotada",BATERIA_DESCARGADA,MEDIO
+"motor caliente con humo blanco",RECALENTAMIENTO_MOTOR,ALTO
+"fusible quemado y sin luces",FALLA_ELECTRICA,MEDIO
+"colision contra motocicleta",COLISION_VISIBLE,ALTO
+"fuga gasolina en inyectores",FUGA_COMBUSTIBLE,ALTO
+"dirección con ruido al girar",FALLA_DIRECCION,MEDIO
+"frenos duros al inicio",FALLA_FRENOS,MEDIO
+"pinchazo en autopista con detencion segura",PINCHAZO_LLANTA,MEDIO
+"bateria descargada tras varios intentos",BATERIA_DESCARGADA,MEDIO
+"recalentamiento al ralentí",RECALENTAMIENTO_MOTOR,MEDIO
+"tablero sin energia de repente",FALLA_ELECTRICA,ALTO
+"colision leve en estacionamiento",COLISION_VISIBLE,MEDIO
+"escape de gasolina en tapa",FUGA_COMBUSTIBLE,MEDIO
+"direccion no responde al girar",FALLA_DIRECCION,ALTO
+"freno pierde eficacia en bajada",FALLA_FRENOS,ALTO
+"llanta baja por valvula danada",PINCHAZO_LLANTA,BAJO
+"bateria falla en frio",BATERIA_DESCARGADA,BAJO
+"temperatura critica con alarma",RECALENTAMIENTO_MOTOR,ALTO
+"olor a cable quemado",FALLA_ELECTRICA,MEDIO
+"accidente con bloqueo de carril",COLISION_VISIBLE,ALTO
+"fuga de combustible bajo motor",FUGA_COMBUSTIBLE,ALTO
+"direccion vibra y jala a un lado",FALLA_DIRECCION,MEDIO
+"freno trasero no actua",FALLA_FRENOS,MEDIO
+"pinchazo doble en calle",PINCHAZO_LLANTA,ALTO
+"bateria sin carga en semaforo",BATERIA_DESCARGADA,MEDIO
+"motor hierve y sale vapor",RECALENTAMIENTO_MOTOR,ALTO
+"falla electrica en arranque remoto",FALLA_ELECTRICA,MEDIO
+"colision con objeto fijo en curva",COLISION_VISIBLE,ALTO
+"olor gasolina y chispa visible",FUGA_COMBUSTIBLE,ALTO
+"direccion muy pesada en maniobra",FALLA_DIRECCION,MEDIO
+"freno ABS enciende testigo",FALLA_FRENOS,MEDIO
+"llanta reventada en avenida",PINCHAZO_LLANTA,ALTO
+"bateria agotada por alternador",BATERIA_DESCARGADA,MEDIO
+"recalienta con aire encendido",RECALENTAMIENTO_MOTOR,MEDIO
+"falla de sensor electrico",FALLA_ELECTRICA,BAJO
+"accidente con herido leve",COLISION_VISIBLE,ALTO
+"fuga combustible en garaje",FUGA_COMBUSTIBLE,MEDIO
+"dirección floja y ruidosa",FALLA_DIRECCION,MEDIO
+"freno delantero chillando",FALLA_FRENOS,BAJO
+"pinchazo por clavo en rueda trasera",PINCHAZO_LLANTA,BAJO
+"bateria intermitente en encendido",BATERIA_DESCARGADA,MEDIO
+"calentamiento extremo en via",RECALENTAMIENTO_MOTOR,ALTO
+"tablero en negro total",FALLA_ELECTRICA,ALTO
+"choque con danio estructural",COLISION_VISIBLE,ALTO
+"fuga de gasolina con charco visible",FUGA_COMBUSTIBLE,ALTO
+"dirección se bloquea al girar",FALLA_DIRECCION,ALTO
+"freno sin respuesta en emergencia",FALLA_FRENOS,ALTO
+"llanta pinchada en camino vecinal",PINCHAZO_LLANTA,MEDIO
+"bateria descargada pero con cables arranca",BATERIA_DESCARGADA,MEDIO
+"motor sube temperatura en minutos",RECALENTAMIENTO_MOTOR,ALTO
+"falla electrica de bobina",FALLA_ELECTRICA,MEDIO
+"colision por alcance en trafico",COLISION_VISIBLE,ALTO
+"olor fuerte combustible tras impacto",FUGA_COMBUSTIBLE,ALTO
+"direccion dura con neumatico bajo",FALLA_DIRECCION,MEDIO
+"frenado irregular en semaforo",FALLA_FRENOS,MEDIO
+"llanta pierde aire por rin",PINCHAZO_LLANTA,MEDIO
+"bateria muerta en estacionamiento subterraneo",BATERIA_DESCARGADA,MEDIO
+"recalentamiento por falta de refrigerante",RECALENTAMIENTO_MOTOR,ALTO
+"luces parpadean y motor falla",FALLA_ELECTRICA,MEDIO
+"accidente en puente con riesgo",COLISION_VISIBLE,ALTO
+"escape de gasolina y olor intenso",FUGA_COMBUSTIBLE,ALTO
+"dirección responde tarde",FALLA_DIRECCION,ALTO
+"freno trasero bloquea rueda",FALLA_FRENOS,MEDIO
+"pinchazo en ruta con pasajero",PINCHAZO_LLANTA,MEDIO
+"bateria no retiene carga",BATERIA_DESCARGADA,MEDIO
+"temperatura en rojo con humo",RECALENTAMIENTO_MOTOR,ALTO
+"corto en sistema electrico central",FALLA_ELECTRICA,ALTO
+"colision y vehiculo no se mueve",COLISION_VISIBLE,ALTO
+"fuga gasolina en manguera principal",FUGA_COMBUSTIBLE,ALTO
+"direccion inestable en recta",FALLA_DIRECCION,MEDIO
+"freno se hunde al detener",FALLA_FRENOS,ALTO
+"llanta dañada y desinflada",PINCHAZO_LLANTA,MEDIO
+"bateria sin energia total",BATERIA_DESCARGADA,ALTO
+"motor recalentado tras embotellamiento",RECALENTAMIENTO_MOTOR,MEDIO
+"falla electrica en modulo de encendido",FALLA_ELECTRICA,MEDIO
