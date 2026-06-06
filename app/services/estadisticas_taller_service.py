@@ -6,8 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.core.enums import EstadoAsignacion, EstadoResultado, EstadoSolicitud, NivelUrgencia
 from app.models.asignacion_atencion import AsignacionAtencion
+from app.models.calificacion_atencion import CalificacionAtencion
 from app.models.resultado_servicio import ResultadoServicio
+from app.models.pago_atencion import PagoAtencion
 from app.models.servicio import Servicio
+from app.models.postulacion_taller import PostulacionTaller
 from app.models.solicitud_emergencia import SolicitudEmergencia
 from app.models.taller import Taller
 from app.models.taller_servicio import TallerServicio
@@ -21,6 +24,7 @@ from app.schemas.estadisticas_taller import (
     KPICancelacionTipo,
     KPIEficienciaServicio,
     KPIIncidenteTipo,
+    KPIFrecuente,
     OpcionesFiltrosTaller,
     ReporteFiltradoTaller,
     ReporteGraficos,
@@ -73,6 +77,18 @@ class EstadisticasTallerService:
                     AsignacionAtencion.id_taller == id_taller,
                     AsignacionAtencion.fecha_asignacion >= fecha_inicio,
                     AsignacionAtencion.fecha_asignacion <= fecha_fin,
+                )
+            )
+            .all()
+        )
+
+        base_postulaciones = (
+            db.query(PostulacionTaller)
+            .filter(
+                and_(
+                    PostulacionTaller.id_taller == id_taller,
+                    PostulacionTaller.fecha_postulacion >= fecha_inicio,
+                    PostulacionTaller.fecha_postulacion <= fecha_fin,
                 )
             )
             .all()
@@ -153,6 +169,15 @@ class EstadisticasTallerService:
         tiempo_promedio_llegada = EstadisticasTallerService._calcular_tiempo_promedio_llegada(
             asignaciones
         )
+        calificacion_promedio = EstadisticasTallerService._calcular_calificacion_promedio(db, asignaciones)
+        pagos_confirmados, monto_total_pagado, monto_promedio_pago = EstadisticasTallerService._calcular_pagos(
+            db, asignaciones
+        )
+        solicitudes_recibidas = len({p.id_solicitud for p in base_postulaciones})
+        solicitudes_aceptadas = len({a.id_solicitud for a in asignaciones})
+        tasa_aceptacion = round((solicitudes_aceptadas / solicitudes_recibidas) * 100, 2) if solicitudes_recibidas else 0
+        cumplimiento_eta_pct = EstadisticasTallerService._calcular_cumplimiento_eta(db, asignaciones)
+        servicios_mas_realizados = EstadisticasTallerService._calcular_servicios_mas_realizados(db, asignaciones)
         incidentes_por_tipo = EstadisticasTallerService._calcular_incidentes_por_tipo(
             db, asignaciones
         )
@@ -171,12 +196,20 @@ class EstadisticasTallerService:
             fecha_fin=fecha_fin,
             total_solicitudes_atendidas=total_atendidas,
             total_solicitudes_canceladas=total_canceladas,
+            solicitudes_recibidas=solicitudes_recibidas,
+            solicitudes_aceptadas=solicitudes_aceptadas,
+            tasa_aceptacion=tasa_aceptacion,
             total_servicios_completados=servicios_completados,
             tasa_completacion=(
                 (servicios_completados / total_atendidas * 100)
                 if total_atendidas > 0
                 else 0
             ),
+            calificacion_promedio=calificacion_promedio,
+            total_pagos_confirmados=pagos_confirmados["cantidad"],
+            monto_total_pagado=pagos_confirmados["monto_total"],
+            monto_promedio_pago=monto_promedio_pago,
+            cumplimiento_eta_pct=cumplimiento_eta_pct,
             diagnosticos=diagnosticos,
             total_diagnosticos_con_seguimiento=total_diag_seguimiento,
             dias_mayor_demanda=dias_mayor_demanda,
@@ -188,6 +221,7 @@ class EstadisticasTallerService:
             zona_mas_incidentes=zona_mas_incidentes,
             cancelaciones_por_tipo=cancelaciones_por_tipo,
             eficiencia_por_servicio=eficiencia_por_servicio,
+            servicios_mas_realizados=servicios_mas_realizados,
         )
 
         return EstadisticasTallerResponse(
@@ -690,6 +724,107 @@ class EstadisticasTallerService:
         if not tiempos:
             return 0
         return round(sum(tiempos) / len(tiempos), 2)
+
+    @staticmethod
+    def _calcular_calificacion_promedio(
+        db: Session, asignaciones: list[AsignacionAtencion]
+    ) -> float | None:
+        if not asignaciones:
+            return None
+        solicitud_ids = [a.id_solicitud for a in asignaciones]
+        try:
+            promedio = (
+                db.query(func.avg(CalificacionAtencion.estrellas))
+                .filter(CalificacionAtencion.id_solicitud.in_(solicitud_ids))
+                .scalar()
+            )
+        except Exception:
+            db.rollback()
+            return None
+        return round(float(promedio), 2) if promedio is not None else None
+
+    @staticmethod
+    def _calcular_pagos(
+        db: Session, asignaciones: list[AsignacionAtencion]
+    ) -> tuple[dict, float, float]:
+        if not asignaciones:
+            return {"cantidad": 0, "monto_total": 0}, 0, 0
+        solicitud_ids = [a.id_solicitud for a in asignaciones]
+        try:
+            pagos = (
+                db.query(PagoAtencion)
+                .filter(PagoAtencion.id_solicitud.in_(solicitud_ids))
+                .all()
+            )
+        except Exception:
+            db.rollback()
+            return {"cantidad": 0, "monto_total": 0}, 0, 0
+        confirmados = [p for p in pagos if str(p.estado_pago).upper() == "CONFIRMADO"]
+        monto_total = round(sum(float(p.monto) for p in confirmados), 2) if confirmados else 0
+        monto_promedio = round(monto_total / len(confirmados), 2) if confirmados else 0
+        return {"cantidad": len(confirmados), "monto_total": monto_total}, monto_total, monto_promedio
+
+    @staticmethod
+    def _calcular_cumplimiento_eta(
+        db: Session,
+        asignaciones: list[AsignacionAtencion],
+    ) -> float:
+        if not asignaciones:
+            return 0
+        try:
+            postulaciones = (
+                db.query(PostulacionTaller.id_postulacion, PostulacionTaller.tiempo_estimado_llegada_min)
+                .filter(PostulacionTaller.id_postulacion.in_([a.id_postulacion for a in asignaciones]))
+                .all()
+            )
+        except Exception:
+            db.rollback()
+            return 0
+        eta_map = {str(pid): eta for pid, eta in postulaciones}
+        cumplidas = 0
+        total = 0
+        for asignacion in asignaciones:
+            eta = eta_map.get(str(asignacion.id_postulacion))
+            if not eta or not asignacion.fecha_asignacion or not asignacion.fecha_inicio_atencion:
+                continue
+            total += 1
+            minutos = max((asignacion.fecha_inicio_atencion - asignacion.fecha_asignacion).total_seconds() / 60, 0)
+            if minutos <= float(eta):
+                cumplidas += 1
+        return round((cumplidas / total) * 100, 2) if total else 0
+
+    @staticmethod
+    def _calcular_servicios_mas_realizados(
+        db: Session,
+        asignaciones: list[AsignacionAtencion],
+    ) -> list[KPIFrecuente]:
+        if not asignaciones:
+            return []
+        asignacion_ids = [a.id_asignacion for a in asignaciones]
+        try:
+            rows = (
+                db.query(Servicio.nombre_servicio, func.count(ResultadoServicio.id_resultado_servicio))
+                .select_from(ResultadoServicio)
+                .join(TallerServicio, TallerServicio.id_taller_servicio == ResultadoServicio.id_taller_servicio)
+                .join(Servicio, Servicio.id_servicio == TallerServicio.id_servicio)
+                .filter(ResultadoServicio.id_asignacion.in_(asignacion_ids))
+                .group_by(Servicio.nombre_servicio)
+                .order_by(func.count(ResultadoServicio.id_resultado_servicio).desc())
+                .limit(10)
+                .all()
+            )
+        except Exception:
+            db.rollback()
+            return []
+        total = len(asignacion_ids)
+        return [
+            KPIFrecuente(
+                nombre=nombre or "SIN_NOMBRE",
+                cantidad=cantidad,
+                porcentaje=round((cantidad / total) * 100, 2) if total else 0,
+            )
+            for nombre, cantidad in rows
+        ]
 
     @staticmethod
     def _calcular_incidentes_por_tipo(

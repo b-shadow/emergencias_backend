@@ -1,21 +1,44 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.enums import TipoActor, ResultadoAuditoria
 from app.core.exceptions import (
     ConflictException,
     ForbiddenException,
     NotFoundException,
 )
+from app.core.enums import (
+    CategoriaNotificacion,
+    EstadoServicio,
+    EstadoSolicitudServicio,
+    ResultadoAuditoria,
+    RolUsuario,
+    TipoActor,
+    TipoNotificacion,
+)
 from app.models.bitacora import Bitacora
 from app.models.servicio import Servicio
+from app.models.solicitud_servicio_taller import SolicitudServicioTaller
 from app.models.taller import Taller
 from app.models.taller_servicio import TallerServicio
+from app.models.usuario import Usuario
+from app.services.notificacion_service import NotificacionService
 
 
 class ServicioService:
     """Servicio para gestionar servicios de talleres."""
+
+    @staticmethod
+    def crear_servicio_global(db: Session, nombre_servicio: str, descripcion: str | None = None) -> Servicio:
+        existente = db.query(Servicio).filter(Servicio.nombre_servicio == nombre_servicio).first()
+        if existente:
+            raise ConflictException("Ya existe un servicio con ese nombre")
+
+        servicio = Servicio(nombre_servicio=nombre_servicio, descripcion=descripcion, estado=EstadoServicio.ACTIVO)
+        db.add(servicio)
+        db.flush()
+        return servicio
 
     @staticmethod
     def get_all_servicios(db: Session) -> list[Servicio]:
@@ -137,6 +160,167 @@ class ServicioService:
         db.commit()
 
         return taller_servicio
+
+    @staticmethod
+    def solicitar_nuevo_servicio_taller(
+        db: Session,
+        taller_id: UUID,
+        usuario_id: UUID,
+        nombre_servicio: str,
+        descripcion: str | None = None,
+    ) -> SolicitudServicioTaller:
+        taller = db.query(Taller).filter(Taller.id_taller == taller_id).first()
+        if not taller:
+            raise NotFoundException("Taller no encontrado")
+
+        solicitud = SolicitudServicioTaller(
+            id_taller=taller_id,
+            nombre_servicio=nombre_servicio.strip(),
+            descripcion=descripcion.strip() if descripcion else None,
+            estado=EstadoSolicitudServicio.EN_ESPERA,
+            id_usuario_solicitante=usuario_id,
+        )
+        db.add(solicitud)
+        db.flush()
+
+        db.add(
+            Bitacora(
+                tipo_actor=TipoActor.TALLER,
+                id_actor=usuario_id,
+                accion="SOLICITAR_SERVICIO",
+                modulo="Servicios",
+                entidad_afectada="SolicitudServicioTaller",
+                id_entidad_afectada=solicitud.id_solicitud_servicio_taller,
+                resultado=ResultadoAuditoria.EXITO,
+                detalle=f"Se solicitó el servicio '{solicitud.nombre_servicio}'",
+            )
+        )
+        administradores = db.query(Usuario).filter(
+            Usuario.rol == RolUsuario.ADMINISTRADOR,
+            Usuario.es_activo.is_(True),
+        ).all()
+        for admin in administradores:
+            NotificacionService.send_notification_to_user(
+                db=db,
+                id_usuario_destino=admin.id_usuario,
+                tipo_usuario_destino="ADMINISTRADOR",
+                titulo="Nueva solicitud de servicio",
+                mensaje=f"El taller '{taller.nombre_taller}' solicitó crear el servicio '{solicitud.nombre_servicio}'.",
+                tipo_notificacion=TipoNotificacion.PUSH,
+                categoria_evento=CategoriaNotificacion.SOLICITUD,
+                referencia_entidad="SolicitudServicioTaller",
+                referencia_id=solicitud.id_solicitud_servicio_taller,
+                actor_id=usuario_id,
+                actor_tipo=TipoActor.TALLER,
+            )
+        db.commit()
+        return solicitud
+
+    @staticmethod
+    def listar_solicitudes_servicio(
+        db: Session,
+        taller_id: UUID | None = None,
+    ) -> list[SolicitudServicioTaller]:
+        query = db.query(SolicitudServicioTaller).order_by(SolicitudServicioTaller.fecha_solicitud.desc())
+        if taller_id:
+            query = query.filter(SolicitudServicioTaller.id_taller == taller_id)
+        return query.all()
+
+    @staticmethod
+    def aprobar_solicitud_servicio(
+        db: Session,
+        solicitud_id: UUID,
+        usuario_id: UUID,
+    ) -> tuple[SolicitudServicioTaller, Servicio]:
+        solicitud = db.query(SolicitudServicioTaller).filter(
+            SolicitudServicioTaller.id_solicitud_servicio_taller == solicitud_id
+        ).first()
+        if not solicitud:
+            raise NotFoundException("Solicitud no encontrada")
+        if solicitud.estado != EstadoSolicitudServicio.EN_ESPERA:
+            raise ConflictException("La solicitud ya fue resuelta")
+
+        servicio = ServicioService.crear_servicio_global(db, solicitud.nombre_servicio, solicitud.descripcion)
+        solicitud.estado = EstadoSolicitudServicio.APROBADO
+        solicitud.id_servicio_creado = servicio.id_servicio
+        solicitud.id_usuario_resolutor = usuario_id
+        solicitud.fecha_resolucion = datetime.utcnow()
+        db.add(
+            Bitacora(
+                tipo_actor=TipoActor.ADMINISTRADOR,
+                id_actor=usuario_id,
+                accion="APROBAR_SOLICITUD_SERVICIO",
+                modulo="Servicios",
+                entidad_afectada="SolicitudServicioTaller",
+                id_entidad_afectada=solicitud.id_solicitud_servicio_taller,
+                resultado=ResultadoAuditoria.EXITO,
+                detalle=f"Se aprobó la solicitud de servicio '{solicitud.nombre_servicio}'",
+            )
+        )
+        if solicitud.taller and solicitud.taller.id_usuario:
+            NotificacionService.send_notification_to_user(
+                db=db,
+                id_usuario_destino=solicitud.taller.id_usuario,
+                tipo_usuario_destino="TALLER",
+                titulo="Solicitud de servicio aprobada",
+                mensaje=f"Tu solicitud para crear '{solicitud.nombre_servicio}' fue aprobada.",
+                tipo_notificacion=TipoNotificacion.PUSH,
+                categoria_evento=CategoriaNotificacion.SOLICITUD,
+                referencia_entidad="SolicitudServicioTaller",
+                referencia_id=solicitud.id_solicitud_servicio_taller,
+                actor_id=usuario_id,
+                actor_tipo=TipoActor.ADMINISTRADOR,
+            )
+        db.commit()
+        return solicitud, servicio
+
+    @staticmethod
+    def rechazar_solicitud_servicio(
+        db: Session,
+        solicitud_id: UUID,
+        usuario_id: UUID,
+        motivo: str | None = None,
+    ) -> SolicitudServicioTaller:
+        solicitud = db.query(SolicitudServicioTaller).filter(
+            SolicitudServicioTaller.id_solicitud_servicio_taller == solicitud_id
+        ).first()
+        if not solicitud:
+            raise NotFoundException("Solicitud no encontrada")
+        if solicitud.estado != EstadoSolicitudServicio.EN_ESPERA:
+            raise ConflictException("La solicitud ya fue resuelta")
+
+        solicitud.estado = EstadoSolicitudServicio.RECHAZADO
+        solicitud.motivo_rechazo = motivo
+        solicitud.id_usuario_resolutor = usuario_id
+        solicitud.fecha_resolucion = datetime.utcnow()
+        db.add(
+            Bitacora(
+                tipo_actor=TipoActor.ADMINISTRADOR,
+                id_actor=usuario_id,
+                accion="RECHAZAR_SOLICITUD_SERVICIO",
+                modulo="Servicios",
+                entidad_afectada="SolicitudServicioTaller",
+                id_entidad_afectada=solicitud.id_solicitud_servicio_taller,
+                resultado=ResultadoAuditoria.EXITO,
+                detalle=f"Se rechazó la solicitud de servicio '{solicitud.nombre_servicio}'",
+            )
+        )
+        if solicitud.taller and solicitud.taller.id_usuario:
+            NotificacionService.send_notification_to_user(
+                db=db,
+                id_usuario_destino=solicitud.taller.id_usuario,
+                tipo_usuario_destino="TALLER",
+                titulo="Solicitud de servicio rechazada",
+                mensaje=f"Tu solicitud para crear '{solicitud.nombre_servicio}' fue rechazada.",
+                tipo_notificacion=TipoNotificacion.PUSH,
+                categoria_evento=CategoriaNotificacion.SOLICITUD,
+                referencia_entidad="SolicitudServicioTaller",
+                referencia_id=solicitud.id_solicitud_servicio_taller,
+                actor_id=usuario_id,
+                actor_tipo=TipoActor.ADMINISTRADOR,
+            )
+        db.commit()
+        return solicitud
 
     @staticmethod
     def remove_servicio_from_taller(

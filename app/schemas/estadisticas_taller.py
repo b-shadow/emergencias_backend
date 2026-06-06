@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EstadisticaDiagnostico(BaseModel):
@@ -38,13 +38,27 @@ class KPIEficienciaServicio(BaseModel):
     tasa_completacion: float
 
 
+class KPIFrecuente(BaseModel):
+    nombre: str
+    cantidad: int
+    porcentaje: float
+
+
 class EstadisticaGeneralTaller(BaseModel):
     fecha_inicio: datetime
     fecha_fin: datetime
     total_solicitudes_atendidas: int
     total_solicitudes_canceladas: int
+    solicitudes_recibidas: int
+    solicitudes_aceptadas: int
+    tasa_aceptacion: float
     total_servicios_completados: int
     tasa_completacion: float
+    calificacion_promedio: float | None = None
+    total_pagos_confirmados: int = 0
+    monto_total_pagado: float = 0
+    monto_promedio_pago: float = 0
+    cumplimiento_eta_pct: float = 0
     diagnosticos: list[EstadisticaDiagnostico]
     total_diagnosticos_con_seguimiento: int
     dias_mayor_demanda: list[EstadisticaDemacruzada]
@@ -56,6 +70,7 @@ class EstadisticaGeneralTaller(BaseModel):
     zona_mas_incidentes: str | None = None
     cancelaciones_por_tipo: list[KPICancelacionTipo]
     eficiencia_por_servicio: list[KPIEficienciaServicio]
+    servicios_mas_realizados: list[KPIFrecuente] = Field(default_factory=list)
 
 
 class FiltroReporteAplicado(BaseModel):

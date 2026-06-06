@@ -1,11 +1,17 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IncidenteFrequente(BaseModel):
     tipo_incidente: str
+    cantidad: int
+    porcentaje: float
+
+
+class ElementoFrecuente(BaseModel):
+    nombre: str
     cantidad: int
     porcentaje: float
 
@@ -75,10 +81,19 @@ class EstadisticasGeneralesResponse(BaseModel):
     fecha_fin: datetime
     total_emergencias: int
     total_solicitudes_atendidas: int
+    total_solicitudes_canceladas: int
+    tasa_cancelacion: float
     total_servicios_realizados: int
     talleres_activos: int
     clientes_activos: int
+    promedio_calificacion: float | None = None
+    total_pagos_confirmados: int = 0
+    total_pagos_pendientes: int = 0
+    monto_total_pagado: float = 0
+    monto_promedio_pago: float = 0
     incidentes_frecuentes: List[IncidenteFrequente]
+    servicios_frecuentes: List[ElementoFrecuente] = Field(default_factory=list)
+    especialidades_frecuentes: List[ElementoFrecuente] = Field(default_factory=list)
     talleres_top: List[TallerActividad]
     zonas_criticas: List[ZonaEmergencia]
     tiempo_respuesta: Optional[TiempoRespuesta] = None

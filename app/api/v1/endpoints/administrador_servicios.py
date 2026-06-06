@@ -8,8 +8,15 @@ from app.core.database import get_db
 from app.core.enums import RolUsuario
 from app.core.exceptions import bad_request, not_found
 from app.models.servicio import Servicio
+from app.models.taller import Taller
 from app.models.usuario import Usuario
 from pydantic import BaseModel
+from app.schemas.solicitud_servicio import (
+    SolicitudServicioCreate,
+    SolicitudServicioResponse,
+    SolicitudServicioResolver,
+)
+from app.services.servicio_service import ServicioService
 
 router = APIRouter()
 
@@ -48,23 +55,9 @@ def crear_servicio(
     Crear nuevo servicio.
     Solo ADMINISTRADOR puede crear.
     """
-    # Validar que no exista servicio con el mismo nombre
-    existente = db.query(Servicio).filter(
-        Servicio.nombre_servicio == data.nombre_servicio
-    ).first()
-    
-    if existente:
-        raise bad_request("Ya existe un servicio con ese nombre")
-    
-    servicio = Servicio(
-        nombre_servicio=data.nombre_servicio,
-        descripcion=data.descripcion,
-        estado="ACTIVO"
-    )
-    db.add(servicio)
+    servicio = ServicioService.crear_servicio_global(db, data.nombre_servicio, data.descripcion)
     db.commit()
     db.refresh(servicio)
-    
     return servicio
 
 
@@ -172,3 +165,83 @@ def eliminar_servicio(
     db.commit()
     
     return {"mensaje": f"Servicio '{servicio.nombre_servicio}' eliminado correctamente"}
+
+
+@router.get(
+    "/solicitudes",
+    response_model=list[SolicitudServicioResponse],
+    dependencies=[Depends(require_roles(RolUsuario.ADMINISTRADOR))],
+)
+def listar_solicitudes_servicio(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    solicitudes = ServicioService.listar_solicitudes_servicio(db)
+    return [
+        SolicitudServicioResponse(
+            id_solicitud_servicio_taller=s.id_solicitud_servicio_taller,
+            id_taller=s.id_taller,
+            nombre_taller=s.taller.nombre_taller if s.taller else None,
+            nombre_servicio=s.nombre_servicio,
+            descripcion=s.descripcion,
+            estado=s.estado,
+            motivo_rechazo=s.motivo_rechazo,
+            id_servicio_creado=s.id_servicio_creado,
+            fecha_solicitud=s.fecha_solicitud,
+            fecha_resolucion=s.fecha_resolucion,
+        )
+        for s in solicitudes
+    ]
+
+
+@router.post(
+    "/solicitudes/{solicitud_id}/aprobar",
+    response_model=SolicitudServicioResponse,
+    dependencies=[Depends(require_roles(RolUsuario.ADMINISTRADOR))],
+)
+def aprobar_solicitud_servicio(
+    solicitud_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    solicitud, _ = ServicioService.aprobar_solicitud_servicio(db, solicitud_id, current_user.id_usuario)
+    return SolicitudServicioResponse(
+        id_solicitud_servicio_taller=solicitud.id_solicitud_servicio_taller,
+        id_taller=solicitud.id_taller,
+        nombre_taller=solicitud.taller.nombre_taller if solicitud.taller else None,
+        nombre_servicio=solicitud.nombre_servicio,
+        descripcion=solicitud.descripcion,
+        estado=solicitud.estado,
+        motivo_rechazo=solicitud.motivo_rechazo,
+        id_servicio_creado=solicitud.id_servicio_creado,
+        fecha_solicitud=solicitud.fecha_solicitud,
+        fecha_resolucion=solicitud.fecha_resolucion,
+    )
+
+
+@router.post(
+    "/solicitudes/{solicitud_id}/rechazar",
+    response_model=SolicitudServicioResponse,
+    dependencies=[Depends(require_roles(RolUsuario.ADMINISTRADOR))],
+)
+def rechazar_solicitud_servicio(
+    solicitud_id: UUID,
+    payload: SolicitudServicioResolver,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    solicitud = ServicioService.rechazar_solicitud_servicio(
+        db, solicitud_id, current_user.id_usuario, payload.motivo_rechazo
+    )
+    return SolicitudServicioResponse(
+        id_solicitud_servicio_taller=solicitud.id_solicitud_servicio_taller,
+        id_taller=solicitud.id_taller,
+        nombre_taller=solicitud.taller.nombre_taller if solicitud.taller else None,
+        nombre_servicio=solicitud.nombre_servicio,
+        descripcion=solicitud.descripcion,
+        estado=solicitud.estado,
+        motivo_rechazo=solicitud.motivo_rechazo,
+        id_servicio_creado=solicitud.id_servicio_creado,
+        fecha_solicitud=solicitud.fecha_solicitud,
+        fecha_resolucion=solicitud.fecha_resolucion,
+    )

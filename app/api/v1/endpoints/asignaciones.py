@@ -5,6 +5,20 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.enums import (
+    CategoriaNotificacion,
+    EstadoAsignacion,
+    EstadoSolicitud,
+    ResultadoAuditoria,
+    RolUsuario,
+    TipoActor,
+    TipoNotificacion,
+)
+from app.core.exceptions import ConflictException, bad_request, forbidden, not_found
+from app.models.bitacora import Bitacora
+from app.models.calificacion_atencion import CalificacionAtencion
+from app.models.cliente import Cliente
+from app.models.taller import Taller
 from app.models.usuario import Usuario
 from app.models.asignacion_atencion import AsignacionAtencion
 from app.schemas.asignacion import (
@@ -14,8 +28,13 @@ from app.schemas.asignacion import (
     ServicioTallerResponse,
     ServicioRealizadoResponse,
 )
+from app.schemas.calificacion_atencion import (
+    CalificacionAtencionCreate,
+    CalificacionAtencionResponse,
+)
 from app.schemas.common import MessageResponse
 from app.services.asignacion_service import AsignacionService
+from app.services.notificacion_service import NotificacionService
 
 
 router = APIRouter()
@@ -321,4 +340,83 @@ def obtener_servicios_realizados(
     - Retorna lista de servicios con diagnostico, solución, observaciones, etc.
     """
     return AsignacionService.get_servicios_realizados(db, asignacion_id, current_user)
+
+
+@router.get("/{asignacion_id}/calificacion", response_model=CalificacionAtencionResponse | None)
+def obtener_calificacion(
+    asignacion_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    asignacion = AsignacionService.get_asignacion(db, asignacion_id, current_user)
+    calificacion = db.query(CalificacionAtencion).filter(CalificacionAtencion.id_asignacion == asignacion.id_asignacion).first()
+    return calificacion
+
+
+@router.post("/{asignacion_id}/calificacion", response_model=CalificacionAtencionResponse, status_code=status.HTTP_201_CREATED)
+def crear_calificacion(
+    asignacion_id: UUID,
+    payload: CalificacionAtencionCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    if current_user.rol != RolUsuario.CLIENTE:
+        raise forbidden("Solo el cliente puede calificar la atención")
+
+    asignacion = AsignacionService.get_asignacion(db, asignacion_id, current_user)
+    if asignacion.estado_asignacion != EstadoAsignacion.ACTIVA or asignacion.solicitud.estado_actual != EstadoSolicitud.ATENDIDA:
+        raise bad_request("La atención no está lista para ser calificada")
+
+    existente = db.query(CalificacionAtencion).filter(CalificacionAtencion.id_asignacion == asignacion.id_asignacion).first()
+    if existente:
+        raise ConflictException("Esta atención ya fue calificada")
+
+    cliente = db.query(Cliente).filter(Cliente.id_usuario == current_user.id_usuario).first()
+    taller = db.query(Taller).filter(Taller.id_taller == asignacion.id_taller).first()
+    if not cliente or not taller:
+        raise not_found("No se encontró cliente o taller asociado")
+
+    calificacion = CalificacionAtencion(
+        id_asignacion=asignacion.id_asignacion,
+        id_solicitud=asignacion.id_solicitud,
+        id_cliente=cliente.id_cliente,
+        id_taller=taller.id_taller,
+        estrellas=payload.estrellas,
+        comentario=payload.comentario,
+        confirmo_estado=payload.confirmo_estado,
+    )
+    db.add(calificacion)
+    db.flush()
+
+    db.add(
+        Bitacora(
+            tipo_actor=TipoActor.CLIENTE,
+            id_actor=current_user.id_usuario,
+            accion="CALIFICAR_ATENCION",
+            modulo="AsignacionAtencion",
+            entidad_afectada="CalificacionAtencion",
+            id_entidad_afectada=calificacion.id_calificacion_atencion,
+            resultado=ResultadoAuditoria.EXITO,
+            detalle=f"Cliente calificó la atención con {payload.estrellas} estrellas. Confirmó estado: {payload.confirmo_estado}. Comentario: {payload.comentario or 'Sin comentario'}",
+        )
+    )
+
+    if taller.id_usuario:
+        NotificacionService.send_notification_to_user(
+            db=db,
+            id_usuario_destino=taller.id_usuario,
+            tipo_usuario_destino="TALLER",
+            titulo="Nueva calificación de atención",
+            mensaje=f"El cliente calificó tu atención con {payload.estrellas} estrellas.",
+            tipo_notificacion=TipoNotificacion.PUSH,
+            categoria_evento=CategoriaNotificacion.ESTADO,
+            referencia_entidad="CalificacionAtencion",
+            referencia_id=calificacion.id_calificacion_atencion,
+            actor_id=current_user.id_usuario,
+            actor_tipo=TipoActor.CLIENTE,
+        )
+
+    db.commit()
+    db.refresh(calificacion)
+    return calificacion
 

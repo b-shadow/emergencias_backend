@@ -181,7 +181,14 @@ class AsignacionService:
                 f"No se puede cambiar de {estado_anterior.value} a {nuevo_estado_solicitud.value}. "
                 f"Transiciones válidas: {[e.value for e in transiciones_validas.get(estado_anterior, [])]}"
             )
-        
+
+        if nuevo_estado_solicitud == EstadoSolicitud.ATENDIDA:
+            from app.services.pago_service import PagoService
+
+            resumen_pago = PagoService.obtener_resumen(db, solicitud.id_solicitud, current_user)
+            if float(resumen_pago.get("saldo_pendiente", 0) or 0) > 0:
+                raise bad_request("No puedes finalizar la atención hasta que el cliente complete el pago")
+
         # Actualizar estado de solicitud
         solicitud.estado_actual = nuevo_estado_solicitud
         

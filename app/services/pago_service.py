@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.enums import EstadoPostulacion, EstadoSolicitud, RolUsuario
 from app.core.exceptions import bad_request, forbidden, not_found
+from app.core.enums import TipoNotificacion, CategoriaNotificacion, TipoActor
 from app.models.asignacion_atencion import AsignacionAtencion
 from app.models.cliente import Cliente
 from app.models.cotizacion_atencion import CotizacionAtencion
@@ -16,6 +17,8 @@ from app.models.pago_atencion import PagoAtencion
 from app.models.postulacion_taller import PostulacionTaller
 from app.models.solicitud_emergencia import SolicitudEmergencia
 from app.models.taller import Taller
+from app.models.usuario import Usuario
+from app.services.notificacion_service import NotificacionService
 
 
 class PagoService:
@@ -113,6 +116,7 @@ class PagoService:
             "total_pagado": total_pagado,
             "saldo_pendiente": saldo,
             "estado_pago": estado_pago,
+            "puede_finalizar": saldo <= 0 and total_exigible > 0,
         }
 
     @staticmethod
@@ -127,6 +131,30 @@ class PagoService:
             **resumen,
             "pagos": pagos,
         }
+
+    @staticmethod
+    def _notificar_taller_pago_completo(db: Session, id_solicitud: UUID, resumen: dict, current_user, observacion: str):
+        if not resumen.get("puede_finalizar"):
+            return
+        id_taller = resumen.get("id_taller")
+        if not id_taller:
+            return
+        taller = db.query(Taller).filter(Taller.id_taller == id_taller).first()
+        if not taller or not taller.id_usuario:
+            return
+        NotificacionService.send_notification_to_user(
+            db=db,
+            id_usuario_destino=taller.id_usuario,
+            tipo_usuario_destino="TALLER",
+            titulo="Pago de cotización completado",
+            mensaje=f"El cliente ya completó el pago de la cotización de la solicitud {id_solicitud}.",
+            tipo_notificacion=TipoNotificacion.PUSH,
+            categoria_evento=CategoriaNotificacion.ESTADO,
+            referencia_entidad="PagoAtencion",
+            referencia_id=id_solicitud,
+            actor_id=current_user.id_usuario if current_user else None,
+            actor_tipo=TipoActor.CLIENTE if current_user and current_user.rol == RolUsuario.CLIENTE else TipoActor.SISTEMA,
+        )
 
     @staticmethod
     async def crear_pago_stripe(db: Session, id_solicitud: UUID, monto: float, current_user):
@@ -210,8 +238,9 @@ class PagoService:
         pago.fecha_confirmacion = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         db.refresh(pago)
-
-        return PagoService.obtener_resumen(db, solicitud.id_solicitud, current_user)
+        resumen = PagoService.obtener_resumen(db, solicitud.id_solicitud, current_user)
+        PagoService._notificar_taller_pago_completo(db, solicitud.id_solicitud, resumen, current_user, "Stripe")
+        return resumen
 
     @staticmethod
     def registrar_pago_manual_taller(db: Session, id_solicitud: UUID, monto: float, observacion: str | None, current_user):
@@ -245,4 +274,6 @@ class PagoService:
         db.add(pago)
         db.commit()
         db.refresh(pago)
+        resumen = PagoService.obtener_resumen(db, solicitud.id_solicitud, current_user)
+        PagoService._notificar_taller_pago_completo(db, solicitud.id_solicitud, resumen, current_user, observacion or "Pago manual")
         return pago

@@ -17,6 +17,10 @@ from app.schemas.servicio import (
     TallerServicioResponse,
     TallerServicioCreate,
 )
+from app.schemas.solicitud_servicio import (
+    SolicitudServicioCreate,
+    SolicitudServicioResponse,
+)
 from app.services.especialidad_service import EspecialidadService
 from app.services.servicio_service import ServicioService
 
@@ -359,4 +363,77 @@ def update_servicio_disponibilidad(
         categoria_tarifa=taller_servicio.categoria_tarifa,
         precio_base=taller_servicio.precio_base,
         tipo_pintura_chaperio=taller_servicio.tipo_pintura_chaperio,
+    )
+
+
+@router.get(
+    "/me/servicios/solicitudes",
+    response_model=list[SolicitudServicioResponse],
+    dependencies=[Depends(require_roles(RolUsuario.TALLER))],
+)
+def get_mis_solicitudes_servicio(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    from app.models.taller import Taller
+
+    taller = db.query(Taller).filter(Taller.id_usuario == current_user.id_usuario).first()
+    if not taller:
+        from app.core.exceptions import NotFoundException
+        raise NotFoundException("Taller no encontrado para el usuario")
+
+    solicitudes = ServicioService.listar_solicitudes_servicio(db, taller.id_taller)
+    return [
+        SolicitudServicioResponse(
+            id_solicitud_servicio_taller=s.id_solicitud_servicio_taller,
+            id_taller=s.id_taller,
+            nombre_taller=s.taller.nombre_taller if s.taller else None,
+            nombre_servicio=s.nombre_servicio,
+            descripcion=s.descripcion,
+            estado=s.estado,
+            motivo_rechazo=s.motivo_rechazo,
+            id_servicio_creado=s.id_servicio_creado,
+            fecha_solicitud=s.fecha_solicitud,
+            fecha_resolucion=s.fecha_resolucion,
+        )
+        for s in solicitudes
+    ]
+
+
+@router.post(
+    "/me/servicios/solicitudes",
+    response_model=SolicitudServicioResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles(RolUsuario.TALLER))],
+)
+def solicitar_nuevo_servicio(
+    payload: SolicitudServicioCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    from app.models.taller import Taller
+
+    taller = db.query(Taller).filter(Taller.id_usuario == current_user.id_usuario).first()
+    if not taller:
+        from app.core.exceptions import NotFoundException
+        raise NotFoundException("Taller no encontrado para el usuario")
+
+    solicitud = ServicioService.solicitar_nuevo_servicio_taller(
+        db=db,
+        taller_id=taller.id_taller,
+        usuario_id=current_user.id_usuario,
+        nombre_servicio=payload.nombre_servicio,
+        descripcion=payload.descripcion,
+    )
+    return SolicitudServicioResponse(
+        id_solicitud_servicio_taller=solicitud.id_solicitud_servicio_taller,
+        id_taller=solicitud.id_taller,
+        nombre_taller=solicitud.taller.nombre_taller if solicitud.taller else None,
+        nombre_servicio=solicitud.nombre_servicio,
+        descripcion=solicitud.descripcion,
+        estado=solicitud.estado,
+        motivo_rechazo=solicitud.motivo_rechazo,
+        id_servicio_creado=solicitud.id_servicio_creado,
+        fecha_solicitud=solicitud.fecha_solicitud,
+        fecha_resolucion=solicitud.fecha_resolucion,
     )

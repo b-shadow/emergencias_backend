@@ -2,15 +2,24 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import EstadoResultado, EstadoSolicitud, NivelUrgencia
 from app.models.asignacion_atencion import AsignacionAtencion
+from app.models.calificacion_atencion import CalificacionAtencion
+from app.models.especialidad import Especialidad
+from app.models.pago_atencion import PagoAtencion
+from app.models.servicio import Servicio
 from app.models.solicitud_emergencia import SolicitudEmergencia
+from app.models.solicitud_emergencia import (
+    EspecialidadSolicitudEmergencia,
+    ServicioSolicitudEmergencia,
+)
 from app.models.taller import Taller
 from app.schemas.estadisticas_sistema import (
     EstadisticasGeneralesResponse,
+    ElementoFrecuente,
     FiltroReporteSistemaAplicado,
     IncidenteFrequente,
     OpcionesFiltrosSistema,
@@ -86,6 +95,9 @@ class EstadisticasSistemaService:
             id_taller=filtros["id_taller"],
         )
 
+        solicitud_ids = [s.id_solicitud for s in solicitudes]
+        asignacion_ids = [a.id_asignacion for s in solicitudes for a in s.asignaciones]
+
         reporte = EstadisticasSistemaService._generar_reporte_filtrado(
             solicitudes=solicitudes,
             fecha_inicio=fecha_inicio,
@@ -102,6 +114,10 @@ class EstadisticasSistemaService:
         solicitudes_atendidas = sum(
             1 for s in solicitudes if s.estado_actual == EstadoSolicitud.ATENDIDA
         )
+        solicitudes_canceladas = sum(
+            1 for s in solicitudes if s.estado_actual == EstadoSolicitud.CANCELADA
+        )
+        tasa_cancelacion = round((solicitudes_canceladas / total_emergencias) * 100, 2) if total_emergencias else 0
 
         total_servicios = sum(
             len([r for a in s.asignaciones for r in a.resultados]) for s in solicitudes
@@ -116,6 +132,63 @@ class EstadisticasSistemaService:
         )
 
         clientes_activos = len({str(s.id_cliente) for s in solicitudes})
+
+        calificaciones = None
+        try:
+            if solicitud_ids:
+                calificaciones = (
+                    db.query(func.avg(CalificacionAtencion.estrellas))
+                    .filter(CalificacionAtencion.id_solicitud.in_(solicitud_ids))
+                    .scalar()
+                )
+        except Exception:
+            db.rollback()
+            calificaciones = None
+
+        pagos_rows = []
+        try:
+            if solicitud_ids:
+                pagos_rows = (
+                    db.query(PagoAtencion)
+                    .filter(PagoAtencion.id_solicitud.in_(solicitud_ids))
+                    .all()
+                )
+        except Exception:
+            db.rollback()
+            pagos_rows = []
+        total_pagos_confirmados = sum(1 for p in pagos_rows if str(p.estado_pago).upper() == "CONFIRMADO")
+        total_pagos_pendientes = sum(1 for p in pagos_rows if str(p.estado_pago).upper() == "PENDIENTE")
+        pagos_confirmados_montos = [float(p.monto) for p in pagos_rows if str(p.estado_pago).upper() == "CONFIRMADO"]
+        monto_total_pagado = round(sum(pagos_confirmados_montos), 2) if pagos_confirmados_montos else 0
+        monto_promedio_pago = round(monto_total_pagado / total_pagos_confirmados, 2) if total_pagos_confirmados else 0
+
+        servicios_count: dict[str, int] = defaultdict(int)
+        if solicitud_ids:
+            try:
+                servicios_rows = (
+                    db.query(ServicioSolicitudEmergencia, Servicio)
+                    .join(Servicio, Servicio.id_servicio == ServicioSolicitudEmergencia.id_servicio)
+                    .filter(ServicioSolicitudEmergencia.id_solicitud.in_(solicitud_ids))
+                    .all()
+                )
+                for _, servicio in servicios_rows:
+                    servicios_count[servicio.nombre_servicio] += 1
+            except Exception:
+                db.rollback()
+
+        especialidades_count: dict[str, int] = defaultdict(int)
+        if solicitud_ids:
+            try:
+                especialidades_rows = (
+                    db.query(EspecialidadSolicitudEmergencia, Especialidad)
+                    .join(Especialidad, Especialidad.id_especialidad == EspecialidadSolicitudEmergencia.id_especialidad)
+                    .filter(EspecialidadSolicitudEmergencia.id_solicitud.in_(solicitud_ids))
+                    .all()
+                )
+                for _, especialidad in especialidades_rows:
+                    especialidades_count[especialidad.nombre_especialidad] += 1
+            except Exception:
+                db.rollback()
 
         incidentes_count: dict[str, int] = defaultdict(int)
         for solicitud in solicitudes:
@@ -218,10 +291,33 @@ class EstadisticasSistemaService:
             fecha_fin=fecha_fin,
             total_emergencias=total_emergencias,
             total_solicitudes_atendidas=solicitudes_atendidas,
+            total_solicitudes_canceladas=solicitudes_canceladas,
+            tasa_cancelacion=tasa_cancelacion,
             total_servicios_realizados=total_servicios,
             talleres_activos=talleres_activos,
             clientes_activos=clientes_activos,
+            promedio_calificacion=round(float(calificaciones), 2) if calificaciones is not None else None,
+            total_pagos_confirmados=total_pagos_confirmados,
+            total_pagos_pendientes=total_pagos_pendientes,
+            monto_total_pagado=monto_total_pagado,
+            monto_promedio_pago=monto_promedio_pago,
             incidentes_frecuentes=incidentes_frecuentes,
+            servicios_frecuentes=[
+                ElementoFrecuente(
+                    nombre=nombre,
+                    cantidad=cantidad,
+                    porcentaje=round((cantidad / total_emergencias) * 100, 2) if total_emergencias else 0,
+                )
+                for nombre, cantidad in sorted(servicios_count.items(), key=lambda x: x[1], reverse=True)[:10]
+            ],
+            especialidades_frecuentes=[
+                ElementoFrecuente(
+                    nombre=nombre,
+                    cantidad=cantidad,
+                    porcentaje=round((cantidad / total_emergencias) * 100, 2) if total_emergencias else 0,
+                )
+                for nombre, cantidad in sorted(especialidades_count.items(), key=lambda x: x[1], reverse=True)[:10]
+            ],
             talleres_top=talleres_top,
             zonas_criticas=zonas_criticas,
             tiempo_respuesta=tiempo_respuesta,

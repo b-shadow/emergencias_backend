@@ -53,6 +53,12 @@ class EstadoServicio(str, enum.Enum):
     INACTIVO = "INACTIVO"
 
 
+class EstadoSolicitudServicio(str, enum.Enum):
+    EN_ESPERA = "EN_ESPERA"
+    APROBADO = "APROBADO"
+    RECHAZADO = "RECHAZADO"
+
+
 class EstadoTallerEspecialidad(str, enum.Enum):
     ACTIVA = "ACTIVA"
     INACTIVA = "INACTIVA"

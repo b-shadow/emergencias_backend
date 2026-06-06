@@ -8,12 +8,14 @@ from app.models.especialidad import Especialidad
 from app.models.taller_especialidad import TallerEspecialidad
 from app.models.servicio import Servicio
 from app.models.taller_servicio import TallerServicio
+from app.models.solicitud_servicio_taller import SolicitudServicioTaller
 from app.models.solicitud_emergencia import SolicitudEmergencia
 from app.models.evidencia import Evidencia
 from app.models.clasificacion_incidente import ClasificacionIncidente
 from app.models.postulacion_taller import PostulacionTaller
 from app.models.cotizacion_atencion import CotizacionAtencion
 from app.models.asignacion_atencion import AsignacionAtencion
+from app.models.calificacion_atencion import CalificacionAtencion
 from app.models.orden_recojo import OrdenRecojo
 from app.models.historial_estado_solicitud import HistorialEstadoSolicitud
 from app.models.resultado_servicio import ResultadoServicio
@@ -37,12 +39,14 @@ __all__ = [
     "TallerEspecialidad",
     "Servicio",
     "TallerServicio",
+    "SolicitudServicioTaller",
     "SolicitudEmergencia",
     "Evidencia",
     "ClasificacionIncidente",
     "PostulacionTaller",
     "CotizacionAtencion",
     "AsignacionAtencion",
+    "CalificacionAtencion",
     "OrdenRecojo",
     "HistorialEstadoSolicitud",
     "ResultadoServicio",

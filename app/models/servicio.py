@@ -18,3 +18,4 @@ class Servicio(Base):
     estado: Mapped[EstadoServicio] = mapped_column(Enum(EstadoServicio, name="service_status"), nullable=False)
 
     talleres = relationship("TallerServicio", back_populates="servicio")
+    solicitudes = relationship("SolicitudServicioTaller", back_populates="servicio_creado")

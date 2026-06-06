@@ -42,4 +42,5 @@ class ResumenPagoResponse(BaseModel):
     total_pagado: float = 0
     saldo_pendiente: float = 0
     estado_pago: str
+    puede_finalizar: bool = False
     pagos: list[PagoResponse] = Field(default_factory=list)
