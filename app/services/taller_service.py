@@ -1,4 +1,5 @@
 ﻿from datetime import datetime, timezone
+import re
 from uuid import UUID
 
 from sqlalchemy import and_
@@ -13,12 +14,23 @@ from app.core.enums import (
 )
 from app.core.exceptions import not_found, forbidden, bad_request
 from app.models.taller import Taller
+from app.models.tenant_taller import TenantTaller
 from app.models.usuario import Usuario
 from app.models.bitacora import Bitacora
 from app.core.logging import logger
 
 
 class TallerService:
+    @staticmethod
+    def _build_tenant_slug(db: Session, base_name: str) -> str:
+        base = re.sub(r"[^a-z0-9]+", "-", base_name.lower()).strip("-") or "taller"
+        candidate = base
+        suffix = 1
+        while db.query(TenantTaller).filter(TenantTaller.slug_tenant == candidate).first():
+            suffix += 1
+            candidate = f"{base}-{suffix}"
+        return candidate
+
     @staticmethod
     def _notify_taller_safe(
         db: Session,
@@ -102,7 +114,16 @@ class TallerService:
         """
         if current_user.rol != RolUsuario.ADMINISTRADOR:
             raise forbidden("Solo administradores pueden crear talleres")
-        
+
+        tenant = TenantTaller(
+            nombre_tenant=data.get("nombre_taller", "Tenant Taller"),
+            slug_tenant=TallerService._build_tenant_slug(db, data.get("nombre_taller", "taller")),
+            es_activo=True,
+        )
+        db.add(tenant)
+        db.flush()
+        data["id_tenant"] = tenant.id_tenant
+
         taller = Taller(**data)
         db.add(taller)
         db.commit()
@@ -661,3 +682,7 @@ class TallerService:
         )
         
         return taller
+
+
+
+

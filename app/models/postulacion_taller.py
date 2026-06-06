@@ -24,3 +24,4 @@ class PostulacionTaller(Base):
     solicitud = relationship("SolicitudEmergencia", back_populates="postulaciones")
     taller = relationship("Taller", back_populates="postulaciones")
     asignacion = relationship("AsignacionAtencion", back_populates="postulacion", uselist=False)
+    cotizacion = relationship("CotizacionAtencion", back_populates="postulacion", uselist=False, cascade="all, delete-orphan")

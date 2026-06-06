@@ -26,3 +26,4 @@ class AsignacionAtencion(Base):
     taller = relationship("Taller", back_populates="asignaciones")
     postulacion = relationship("PostulacionTaller", back_populates="asignacion")
     resultados = relationship("ResultadoServicio", back_populates="asignacion", cascade="all, delete-orphan")
+    orden_recojo = relationship("OrdenRecojo", back_populates="asignacion", uselist=False, cascade="all, delete-orphan")

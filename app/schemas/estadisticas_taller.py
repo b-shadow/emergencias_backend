@@ -20,6 +20,24 @@ class EstadisticaTiempoAtencion(BaseModel):
     tiempo_maximo_minutos: float
 
 
+class KPIIncidenteTipo(BaseModel):
+    tipo: str
+    cantidad: int
+
+
+class KPICancelacionTipo(BaseModel):
+    motivo: str
+    cantidad: int
+
+
+class KPIEficienciaServicio(BaseModel):
+    servicio: str
+    categoria_tarifa: str
+    total: int
+    completados: int
+    tasa_completacion: float
+
+
 class EstadisticaGeneralTaller(BaseModel):
     fecha_inicio: datetime
     fecha_fin: datetime
@@ -32,6 +50,12 @@ class EstadisticaGeneralTaller(BaseModel):
     dias_mayor_demanda: list[EstadisticaDemacruzada]
     horas_mayor_demanda: list[EstadisticaDemacruzada]
     tiempo_promedio_atencion: EstadisticaTiempoAtencion
+    tiempo_promedio_asignacion_minutos: float
+    tiempo_promedio_llegada_minutos: float
+    incidentes_por_tipo: list[KPIIncidenteTipo]
+    zona_mas_incidentes: str | None = None
+    cancelaciones_por_tipo: list[KPICancelacionTipo]
+    eficiencia_por_servicio: list[KPIEficienciaServicio]
 
 
 class FiltroReporteAplicado(BaseModel):

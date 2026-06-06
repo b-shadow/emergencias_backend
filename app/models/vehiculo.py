@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import EstadoRegistroVehiculo
+from app.core.enums import EstadoRegistroVehiculo, TipoSeguroVehiculo
 from app.models.base import Base
 
 
@@ -21,6 +21,12 @@ class Vehiculo(Base):
     color: Mapped[str | None] = mapped_column(String(50), nullable=True)
     tipo_combustible: Mapped[str | None] = mapped_column(String(50), nullable=True)
     observaciones: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    tipo_seguro: Mapped[TipoSeguroVehiculo] = mapped_column(
+        Enum(TipoSeguroVehiculo, name="tipo_seguro_vehiculo"),
+        nullable=False,
+        default=TipoSeguroVehiculo.SIN_SEGURO,
+    )
+    aseguradora: Mapped[str | None] = mapped_column(String(120), nullable=True)
     estado_registro: Mapped[EstadoRegistroVehiculo] = mapped_column(Enum(EstadoRegistroVehiculo, name="vehicle_registration_status"), nullable=False)
     fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

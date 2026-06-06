@@ -13,6 +13,8 @@ from app.integrations.supabase_storage import SupabaseStorageAdapter
 from app.models.evidencia import Evidencia
 from app.models.usuario import Usuario
 from app.models.vehiculo import Vehiculo
+from app.models.servicio import Servicio
+from app.models.especialidad import Especialidad
 from app.schemas.solicitud import (
     SolicitudCreateRequest,
     SolicitudUpdateRequest,
@@ -42,15 +44,126 @@ from app.schemas.incident_analysis import (
     ProblemUrgencyRequest,
     ProblemUrgencyResponse,
     ProcessProblemToolResponse,
+    SmartServiceSuggestionRequest,
+    SmartServiceSuggestionResponse,
 )
 from app.schemas.common import MessageResponse
 from app.services.solicitud_service import SolicitudService
 from app.integrations.ai_text_audio import AITextAudioService
 from app.services.groq_urgency_service import GroqUrgencyService
+from app.services.smart_service_selector import SmartServiceSelector
 from loguru import logger
 
 
 router = APIRouter()
+
+
+@router.get("/{solicitud_id}/servicio-inteligente")
+def get_sugerencia_servicio_inteligente(
+    solicitud_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    solicitud = SolicitudService.get_solicitud(db, solicitud_id, current_user)
+    tipo_seguro = None
+    if solicitud.id_vehiculo:
+        vehiculo = db.query(Vehiculo).filter(Vehiculo.id_vehiculo == solicitud.id_vehiculo).first()
+        if vehiculo and vehiculo.tipo_seguro:
+            tipo_seguro = vehiculo.tipo_seguro.value if hasattr(vehiculo.tipo_seguro, "value") else str(vehiculo.tipo_seguro)
+
+    return SmartServiceSelector.suggest(
+        descripcion=solicitud.descripcion_texto or solicitud.transcripcion_audio,
+        tipo_seguro=tipo_seguro,
+        categoria_incidente=solicitud.categoria_incidente,
+    )
+
+
+def _resolver_servicio_especialidad_por_sugerencia(
+    db: Session, servicio_sugerido: str
+) -> tuple[Servicio | None, Especialidad | None]:
+    s = (servicio_sugerido or "").upper()
+    servicio = None
+    especialidad = None
+    if "GRUA" in s:
+        servicio = db.query(Servicio).filter(Servicio.nombre_servicio.ilike("%grua%")).first()
+        especialidad = db.query(Especialidad).filter(Especialidad.nombre_especialidad.ilike("%mecan%")).first()
+    elif "CHAPERIO" in s or "PINTURA" in s:
+        servicio = db.query(Servicio).filter(Servicio.nombre_servicio.ilike("%chaper%")).first()
+        if not servicio:
+            servicio = db.query(Servicio).filter(Servicio.nombre_servicio.ilike("%pint%")).first()
+        especialidad = db.query(Especialidad).filter(Especialidad.nombre_especialidad.ilike("%chap%")).first()
+    elif "AUXILIO_RAPIDO" in s:
+        servicio = db.query(Servicio).filter(Servicio.nombre_servicio.ilike("%aux%")).first()
+        if not servicio:
+            servicio = db.query(Servicio).filter(Servicio.nombre_servicio.ilike("%diag%")).first()
+        especialidad = db.query(Especialidad).filter(Especialidad.nombre_especialidad.ilike("%mecan%")).first()
+    else:
+        servicio = db.query(Servicio).filter(Servicio.nombre_servicio.ilike("%mecan%")).first()
+        if not servicio:
+            servicio = db.query(Servicio).filter(Servicio.nombre_servicio.ilike("%diag%")).first()
+        especialidad = db.query(Especialidad).filter(Especialidad.nombre_especialidad.ilike("%mecan%")).first()
+    return servicio, especialidad
+
+
+def _resolver_lista_servicios_especialidades(
+    db: Session, servicios_sugeridos: list[str], especialidades_sugeridas: list[str]
+) -> tuple[list[Servicio], list[Especialidad]]:
+    servicios: list[Servicio] = []
+    especialidades: list[Especialidad] = []
+
+    for servicio_nombre in servicios_sugeridos:
+        servicio, especialidad = _resolver_servicio_especialidad_por_sugerencia(db, servicio_nombre)
+        if servicio and all(item.id_servicio != servicio.id_servicio for item in servicios):
+            servicios.append(servicio)
+        if especialidad and all(item.id_especialidad != especialidad.id_especialidad for item in especialidades):
+            especialidades.append(especialidad)
+
+    for especialidad_nombre in especialidades_sugeridas:
+        nombre = (especialidad_nombre or "").lower()
+        especialidad = (
+            db.query(Especialidad)
+            .filter(Especialidad.nombre_especialidad.ilike(f"%{nombre}%"))
+            .first()
+        )
+        if especialidad and all(item.id_especialidad != especialidad.id_especialidad for item in especialidades):
+            especialidades.append(especialidad)
+
+    return servicios, especialidades
+
+
+@router.post("/tools/sugerir-servicio-inteligente", response_model=SmartServiceSuggestionResponse)
+def sugerir_servicio_inteligente(
+    payload: SmartServiceSuggestionRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    tipo_seguro = None
+    if payload.id_vehiculo:
+        vehiculo = db.query(Vehiculo).filter(Vehiculo.id_vehiculo == payload.id_vehiculo).first()
+        if vehiculo and vehiculo.tipo_seguro:
+            tipo_seguro = vehiculo.tipo_seguro.value if hasattr(vehiculo.tipo_seguro, "value") else str(vehiculo.tipo_seguro)
+
+    sugerencia = SmartServiceSelector.suggest(
+        descripcion=payload.descripcion,
+        tipo_seguro=tipo_seguro,
+        categoria_incidente=payload.categoria_incidente,
+    )
+    servicio, especialidad = _resolver_servicio_especialidad_por_sugerencia(
+        db, sugerencia.get("servicio_sugerido", "")
+    )
+    _ = current_user
+    return SmartServiceSuggestionResponse(
+        servicio_sugerido=sugerencia.get("servicio_sugerido", "DIAGNOSTICO_GENERAL"),
+        motivo=sugerencia.get("motivo", ""),
+        prioridad=sugerencia.get("prioridad", "BAJA"),
+        requiere_grua=bool(sugerencia.get("requiere_grua", False)),
+        requiere_cotizacion_previa=bool(sugerencia.get("requiere_cotizacion_previa", True)),
+        aplica_pago_minimo_ida=bool(sugerencia.get("aplica_pago_minimo_ida", True)),
+        id_servicio_sugerido=servicio.id_servicio if servicio else None,
+        nombre_servicio_sugerido=servicio.nombre_servicio if servicio else None,
+        id_especialidad_sugerida=especialidad.id_especialidad if especialidad else None,
+        nombre_especialidad_sugerida=especialidad.nombre_especialidad if especialidad else None,
+    )
 
 
 @router.get("", response_model=list[SolicitudResponse])
@@ -810,15 +923,81 @@ async def process_problem_tool(
 ):
     """
     Procesa la descripción del problema con IA (Groq) para:
-    - Detectar nivel de urgencia (BAJO|MEDIO|ALTO)
-    - Generar mensaje tipo chatbot para el usuario
-    - Recomendar acción en app
+    - Detectar nivel de urgencia
+    - Inferir categoría, servicios y especialidades
+    - Generar mensaje resumido para el usuario
     """
     try:
-        _ = db
+        tipo_seguro = None
+        if payload.id_vehiculo:
+            vehiculo = db.query(Vehiculo).filter(Vehiculo.id_vehiculo == payload.id_vehiculo).first()
+            if vehiculo and vehiculo.tipo_seguro:
+                tipo_seguro = vehiculo.tipo_seguro.value if hasattr(vehiculo.tipo_seguro, "value") else str(vehiculo.tipo_seguro)
+
         _ = current_user
         urgency_service = GroqUrgencyService()
-        result = await urgency_service.classify_problem(payload.texto)
+        urgencia = await urgency_service.classify_problem(payload.texto)
+        sugerencia = SmartServiceSelector.suggest(
+            descripcion=payload.texto,
+            tipo_seguro=tipo_seguro,
+            categoria_incidente=payload.categoria_incidente or urgencia.get("categoria_incidente"),
+        )
+
+        servicios_sugeridos = list(
+            dict.fromkeys(
+                [str(x).strip() for x in (urgencia.get("servicios_sugeridos", []) or []) if str(x).strip()]
+                + [str(x).strip() for x in (sugerencia.get("servicios_sugeridos", []) or []) if str(x).strip()]
+            )
+        )
+        especialidades_sugeridas = list(
+            dict.fromkeys(
+                [str(x).strip() for x in (urgencia.get("especialidades_sugeridas", []) or []) if str(x).strip()]
+                + [str(x).strip() for x in (sugerencia.get("especialidades_sugeridas", []) or []) if str(x).strip()]
+            )
+        )
+
+        servicios_db, especialidades_db = _resolver_lista_servicios_especialidades(
+            db, servicios_sugeridos, especialidades_sugeridas
+        )
+        servicio_principal, especialidad_principal = _resolver_servicio_especialidad_por_sugerencia(
+            db, sugerencia.get("servicio_sugerido", "")
+        )
+
+        if servicio_principal and all(item.id_servicio != servicio_principal.id_servicio for item in servicios_db):
+            servicios_db.insert(0, servicio_principal)
+        if especialidad_principal and all(item.id_especialidad != especialidad_principal.id_especialidad for item in especialidades_db):
+            especialidades_db.insert(0, especialidad_principal)
+
+        criterio = str(urgencia.get("criterio_detectado", "")).strip() or sugerencia.get("motivo", "")
+        mensaje = str(urgencia.get("mensaje_chatbot", "")).strip()
+        if not mensaje:
+            mensaje = f"Detectamos una urgencia {urgencia.get('nivel_urgencia', 'MEDIO').lower()} y una sugerencia prioritaria."
+
+        accion = str(urgencia.get("accion_recomendada", "")).strip()
+        if not accion:
+            accion = "Revisar el vehiculo y continuar con la solicitud guiada."
+
+        result = {
+            **urgencia,
+            "criterio_detectado": criterio,
+            "mensaje_chatbot": mensaje,
+            "accion_recomendada": accion,
+            "categoria_incidente": urgencia.get("categoria_incidente") or payload.categoria_incidente,
+            "servicio_sugerido": servicios_db[0].nombre_servicio if servicios_db else sugerencia.get("servicio_sugerido"),
+            "especialidad_sugerida": especialidades_db[0].nombre_especialidad if especialidades_db else None,
+            "id_servicio_sugerido": servicios_db[0].id_servicio if servicios_db else None,
+            "nombre_servicio_sugerido": servicios_db[0].nombre_servicio if servicios_db else sugerencia.get("servicio_sugerido"),
+            "id_especialidad_sugerida": especialidades_db[0].id_especialidad if especialidades_db else None,
+            "nombre_especialidad_sugerida": especialidades_db[0].nombre_especialidad if especialidades_db else None,
+            "servicios_sugeridos": [srv.nombre_servicio for srv in servicios_db],
+            "especialidades_sugeridas": [esp.nombre_especialidad for esp in especialidades_db],
+            "ids_servicios_sugeridos": [srv.id_servicio for srv in servicios_db],
+            "ids_especialidades_sugeridas": [esp.id_especialidad for esp in especialidades_db],
+            "motivo": sugerencia.get("motivo", ""),
+            "requiere_grua": bool(sugerencia.get("requiere_grua", False)),
+            "requiere_cotizacion_previa": bool(sugerencia.get("requiere_cotizacion_previa", False)),
+            "aplica_pago_minimo_ida": bool(sugerencia.get("aplica_pago_minimo_ida", False)),
+        }
         return ProcessProblemToolResponse(
             success=True,
             data=ProblemUrgencyResponse(**result),

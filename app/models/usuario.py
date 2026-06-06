@@ -26,5 +26,6 @@ class Usuario(Base):
 
     cliente = relationship("Cliente", back_populates="usuario", uselist=False)
     taller = relationship("Taller", back_populates="usuario", uselist=False)
+    trabajador = relationship("Trabajador", back_populates="usuario", uselist=False)
     notificaciones = relationship("Notificacion", back_populates="usuario")
     dispositivos_push = relationship("DispositivoPush", back_populates="usuario", cascade="all, delete-orphan")

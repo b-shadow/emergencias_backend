@@ -11,11 +11,13 @@ from app.api.v1.endpoints import (
     estadisticas_taller,
     estadisticas_sistema,
     notificaciones,
+    pagos,
     postulaciones,
     push,
     solicitudes_emergencia,
     talleres,
     usuarios,
+    trabajadores,
     vehiculos,
 )
 
@@ -36,4 +38,6 @@ api_router.include_router(solicitudes_emergencia.router, prefix="/solicitudes_em
 api_router.include_router(postulaciones.router, prefix="/postulaciones", tags=["Postulaciones"])
 api_router.include_router(asignaciones.router, prefix="/asignaciones", tags=["Asignaciones"])
 api_router.include_router(notificaciones.router, prefix="/notificaciones", tags=["Notificaciones"])
+api_router.include_router(pagos.router, prefix="/pagos", tags=["Pagos"])
 api_router.include_router(push.router, prefix="/push", tags=["Push Notifications"])
+api_router.include_router(trabajadores.router, prefix="/trabajadores", tags=["Trabajadores"])

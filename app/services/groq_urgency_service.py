@@ -11,7 +11,7 @@ from app.core.exceptions import bad_request
 class GroqUrgencyService:
     """Clasifica nivel de urgencia de emergencia vehicular con Groq."""
 
-    VALID_LEVELS = {"BAJO", "MEDIO", "ALTO"}
+    VALID_LEVELS = {"BAJO", "MEDIO", "ALTO", "CRITICO"}
 
     def __init__(self) -> None:
         self.base_url = settings.groq_base_url.rstrip("/")
@@ -22,19 +22,23 @@ class GroqUrgencyService:
     def _build_system_prompt(self) -> str:
         return (
             "Eres un asistente experto en emergencias vehiculares. "
-            "Debes clasificar el nivel de urgencia SOLO como BAJO, MEDIO o ALTO. "
+            "Debes clasificar el nivel de urgencia SOLO como BAJO, MEDIO, ALTO o CRITICO. "
             "Usa estos criterios:\n"
             "- BAJO: falla leve/preventiva, el vehiculo puede moverse, usuario en lugar seguro, sin riesgo inmediato.\n"
             "- MEDIO: falla importante, puede quedar varado o empeorar, pero sin peligro directo inmediato.\n"
             "- ALTO: riesgo inmediato para personas/terceros/vehiculo, accidente, humo/fuego, fuga de gasolina, frenos/direccion sin respuesta, varado en via peligrosa.\n"
+            "- CRITICO: incendio, explosion, atropello, vehiculo totalmente inmovilizado en via rapida o riesgo vital.\n"
             "Tambien considera casos de carbonilla en gasolina segun contexto (leve=BAJO, varado sin riesgo=MEDIO, con humo/olor fuerte/inmovilizacion peligrosa=ALTO).\n"
             "Responde EXCLUSIVAMENTE en JSON valido con esta estructura exacta:\n"
             "{\n"
-            '  "nivel_urgencia": "BAJO|MEDIO|ALTO",\n'
+            '  "nivel_urgencia": "BAJO|MEDIO|ALTO|CRITICO",\n'
             '  "criterio_detectado": "texto breve",\n'
             '  "mensaje_chatbot": "mensaje para el usuario final en tono claro y empatico",\n'
             '  "accion_recomendada": "texto breve",\n'
-            '  "confianza": 0.0\n'
+            '  "confianza": 0.0,\n'
+            '  "categoria_incidente": "COLISION_VISIBLE|HUMO_O_SOBRECALENTAMIENTO|PINCHAZO_LLANTA|SIN_HALLAZGOS_CLAROS|VEHICULO_INMOVILIZADO",\n'
+            '  "servicios_sugeridos": ["texto"],\n'
+            '  "especialidades_sugeridas": ["texto"]\n'
             "}\n"
             "No incluyas markdown, ni explicaciones fuera del JSON."
         )
@@ -97,6 +101,9 @@ class GroqUrgencyService:
         mensaje = str(parsed.get("mensaje_chatbot", "")).strip()
         criterio = str(parsed.get("criterio_detectado", "")).strip()
         accion = str(parsed.get("accion_recomendada", "")).strip()
+        categoria_incidente = str(parsed.get("categoria_incidente", "")).strip() or None
+        servicios_sugeridos = parsed.get("servicios_sugeridos", []) or []
+        especialidades_sugeridas = parsed.get("especialidades_sugeridas", []) or []
 
         try:
             confianza = float(parsed.get("confianza", 0.7))
@@ -119,4 +126,7 @@ class GroqUrgencyService:
             "confianza": confianza,
             "proveedor": "groq",
             "modelo": self.model,
+            "categoria_incidente": categoria_incidente,
+            "servicios_sugeridos": [str(x).strip() for x in servicios_sugeridos if str(x).strip()],
+            "especialidades_sugeridas": [str(x).strip() for x in especialidades_sugeridas if str(x).strip()],
         }

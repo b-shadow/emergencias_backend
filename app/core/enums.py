@@ -4,6 +4,7 @@
 class RolUsuario(str, enum.Enum):
     CLIENTE = "CLIENTE"
     TALLER = "TALLER"
+    TRABAJADOR = "TRABAJADOR"
     ADMINISTRADOR = "ADMINISTRADOR"
 
 
@@ -77,11 +78,42 @@ class EstadoResultado(str, enum.Enum):
     PENDIENTE = "PENDIENTE"
 
 
+class CategoriaTarifaServicio(str, enum.Enum):
+    MECANICO = "MECANICO"
+    ELECTRONICO = "ELECTRONICO"
+    CHAPERIO = "CHAPERIO"
+
+
+class EstadoCotizacion(str, enum.Enum):
+    PENDIENTE = "PENDIENTE"
+    ACEPTADA_CLIENTE = "ACEPTADA_CLIENTE"
+    RECHAZADA_CLIENTE = "RECHAZADA_CLIENTE"
+    EXPIRADA = "EXPIRADA"
+
+
+class TipoSeguroVehiculo(str, enum.Enum):
+    SIN_SEGURO = "SIN_SEGURO"
+    BASICO = "BASICO"
+    COMPLETO = "COMPLETO"
+
+
 class TipoActor(str, enum.Enum):
     CLIENTE = "CLIENTE"
     TALLER = "TALLER"
+    TRABAJADOR = "TRABAJADOR"
     ADMINISTRADOR = "ADMINISTRADOR"
     SISTEMA = "SISTEMA"
+
+
+class EstadoOrdenRecojo(str, enum.Enum):
+    PENDIENTE_ACEPTACION = "PENDIENTE_ACEPTACION"
+    ACEPTADA = "ACEPTADA"
+    EN_CAMINO_RECOJO = "EN_CAMINO_RECOJO"
+    LLEGADA_AUXILIO = "LLEGADA_AUXILIO"
+    EN_CAMINO_TALLER = "EN_CAMINO_TALLER"
+    VEHICULO_RECOGIDO = "VEHICULO_RECOGIDO"
+    FINALIZADA = "FINALIZADA"
+    CANCELADA = "CANCELADA"
 
 
 class TipoEvidencia(str, enum.Enum):

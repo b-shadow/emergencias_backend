@@ -170,19 +170,36 @@ class AnalyzeIncidentToolResponse(BaseModel):
 
 
 class ProblemUrgencyRequest(BaseModel):
-    """Request para procesar descripción de problema con IA (Groq)."""
-    texto: str = Field(..., min_length=8, description="Descripción del problema")
+    """Request para procesar descripcion de problema con IA."""
+    texto: str = Field(..., min_length=8, description="Descripcion del problema")
+    id_vehiculo: UUID | None = Field(None, description="Vehiculo afectado para enriquecer sugerencias")
+    categoria_incidente: str | None = Field(None, description="Categoria detectada previamente por imagen u otro medio")
 
 
 class ProblemUrgencyResponse(BaseModel):
-    """Resultado de clasificación de urgencia para el problema descrito."""
-    nivel_urgencia: str = Field(..., description="BAJO, MEDIO o ALTO")
+    """Resultado de clasificacion de urgencia y sugerencia operativa."""
+    nivel_urgencia: str = Field(..., description="BAJO, MEDIO, ALTO o CRITICO")
     criterio_detectado: Optional[str] = Field(None, description="Resumen del criterio aplicado")
     mensaje_chatbot: str = Field(..., description="Mensaje para mostrar al usuario")
-    accion_recomendada: Optional[str] = Field(None, description="Acción sugerida en app")
-    confianza: float = Field(..., ge=0.0, le=1.0, description="Confianza de clasificación")
+    accion_recomendada: Optional[str] = Field(None, description="Accion sugerida en app")
+    confianza: float = Field(..., ge=0.0, le=1.0, description="Confianza de clasificacion")
     proveedor: str = Field(..., description="Proveedor de IA usado")
     modelo: str = Field(..., description="Modelo LLM usado")
+    categoria_incidente: Optional[str] = Field(None, description="Categoria de incidente sugerida")
+    servicio_sugerido: Optional[str] = Field(None, description="Servicio principal sugerido")
+    especialidad_sugerida: Optional[str] = Field(None, description="Especialidad principal sugerida")
+    id_servicio_sugerido: UUID | None = Field(None, description="ID del servicio principal si existe en catalogo")
+    nombre_servicio_sugerido: Optional[str] = Field(None, description="Nombre legible del servicio principal")
+    id_especialidad_sugerida: UUID | None = Field(None, description="ID de la especialidad principal si existe en catalogo")
+    nombre_especialidad_sugerida: Optional[str] = Field(None, description="Nombre legible de la especialidad principal")
+    servicios_sugeridos: list[str] = Field(default_factory=list, description="Lista de servicios sugeridos")
+    especialidades_sugeridas: list[str] = Field(default_factory=list, description="Lista de especialidades sugeridas")
+    ids_servicios_sugeridos: list[UUID] = Field(default_factory=list, description="IDs de servicios sugeridos encontrados")
+    ids_especialidades_sugeridas: list[UUID] = Field(default_factory=list, description="IDs de especialidades sugeridas encontradas")
+    motivo: Optional[str] = Field(None, description="Razon principal de la sugerencia")
+    requiere_grua: bool = Field(False, description="Indica si conviene remolque")
+    requiere_cotizacion_previa: bool = Field(False, description="Indica si requiere cotizacion")
+    aplica_pago_minimo_ida: bool = Field(False, description="Indica si aplica pago minimo de ida")
 
 
 class ProcessProblemToolResponse(BaseModel):
@@ -190,6 +207,27 @@ class ProcessProblemToolResponse(BaseModel):
     success: bool
     data: Optional[ProblemUrgencyResponse] = None
     error: Optional[str] = None
+
+
+class SmartServiceSuggestionRequest(BaseModel):
+    """Request para sugerencia inteligente previa a crear solicitud."""
+    descripcion: str = Field(..., min_length=5)
+    id_vehiculo: UUID | None = None
+    categoria_incidente: str | None = None
+
+
+class SmartServiceSuggestionResponse(BaseModel):
+    """Sugerencia inteligente de servicio/especialidad para emergencia."""
+    servicio_sugerido: str
+    motivo: str
+    prioridad: str
+    requiere_grua: bool
+    requiere_cotizacion_previa: bool
+    aplica_pago_minimo_ida: bool
+    id_servicio_sugerido: UUID | None = None
+    nombre_servicio_sugerido: str | None = None
+    id_especialidad_sugerida: UUID | None = None
+    nombre_especialidad_sugerida: str | None = None
 
 
 # ==================== Batch/Admin Schemas ====================

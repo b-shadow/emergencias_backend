@@ -62,6 +62,10 @@ class ServicioService:
         rol: str,
         disponible: bool = True,
         observaciones: str | None = None,
+        categoria_tarifa: str = "MECANICO",
+        precio_base: float = 0,
+        precio_ida_minimo: float = 0,
+        tipo_pintura_chaperio: str | None = None,
     ) -> TallerServicio:
         """
         Agregar un servicio a un taller.
@@ -112,6 +116,10 @@ class ServicioService:
             id_servicio=servicio_id,
             disponible=disponible,
             observaciones=observaciones,
+            categoria_tarifa=categoria_tarifa,
+            precio_base=precio_base,
+            precio_ida_minimo=precio_ida_minimo,
+            tipo_pintura_chaperio=tipo_pintura_chaperio,
         )
         db.add(taller_servicio)
         db.flush()
@@ -203,6 +211,10 @@ class ServicioService:
         rol: str,
         disponible: bool,
         observaciones: str | None = None,
+        categoria_tarifa: str = "MECANICO",
+        precio_base: float = 0,
+        precio_ida_minimo: float = 0,
+        tipo_pintura_chaperio: str | None = None,
     ) -> TallerServicio:
         """
         Actualizar la disponibilidad y observaciones de un servicio.
@@ -249,6 +261,10 @@ class ServicioService:
         # Actualizar
         taller_servicio.disponible = disponible
         taller_servicio.observaciones = observaciones
+        taller_servicio.categoria_tarifa = categoria_tarifa
+        taller_servicio.precio_base = precio_base
+        taller_servicio.precio_ida_minimo = precio_ida_minimo
+        taller_servicio.tipo_pintura_chaperio = tipo_pintura_chaperio
         db.flush()
 
         # Registrar en bitácora

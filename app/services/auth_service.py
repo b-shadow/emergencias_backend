@@ -2,6 +2,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 import secrets
+import re
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -14,6 +15,8 @@ from app.core.email import EmailService
 from app.models.usuario import Usuario
 from app.models.cliente import Cliente
 from app.models.taller import Taller
+from app.models.taller_subscription import TallerSubscription
+from app.models.tenant_taller import TenantTaller
 from app.models.bitacora import Bitacora
 
 
@@ -22,6 +25,7 @@ class AuthService:
     ROLE_TO_ACTOR = {
         RolUsuario.CLIENTE: TipoActor.CLIENTE,
         RolUsuario.TALLER: TipoActor.TALLER,
+        RolUsuario.TRABAJADOR: TipoActor.TRABAJADOR,
         RolUsuario.ADMINISTRADOR: TipoActor.ADMINISTRADOR,
     }
 
@@ -62,9 +66,9 @@ class AuthService:
     @staticmethod
     def _validar_entorno(rol: RolUsuario, client_type: str) -> None:
         """Valida que el rol pueda acceder desde el entorno especificado"""
-        # Cliente solo desde mobile
-        if rol == RolUsuario.CLIENTE and client_type != "mobile":
-            raise forbidden("Los clientes deben acceder desde la aplicación móvil")
+        # Cliente y Trabajador solo desde mobile
+        if rol in (RolUsuario.CLIENTE, RolUsuario.TRABAJADOR) and client_type != "mobile":
+            raise forbidden(f"Los {rol.value} deben acceder desde la aplicación móvil")
         
         # Taller y Admin solo desde web
         if rol in (RolUsuario.TALLER, RolUsuario.ADMINISTRADOR) and client_type != "web":
@@ -173,8 +177,8 @@ class AuthService:
     def registrar_taller(
         db: Session,
         correo: str,
-        contrasena: str,
-        confirmar_contrasena: str,
+        contrasena: str | None,
+        confirmar_contrasena: str | None,
         nombre_taller: str,
         telefono: str,
         direccion: str,
@@ -183,12 +187,18 @@ class AuthService:
         latitud: float | None = None,
         longitud: float | None = None,
         descripcion: str | None = None,
+        contrasena_hash: str | None = None,
     ) -> dict:
         """Registra una solicitud de nuevo taller en el sistema (estado PENDIENTE)"""
-        
-        # Validar que las contraseñas coincidan
-        if contrasena != confirmar_contrasena:
-            raise bad_request("Las contraseñas no coinciden")
+        # Validar contraseña (modo normal) o hash preprocesado (modo checkout Stripe)
+        if contrasena_hash is None:
+            if not contrasena or not confirmar_contrasena:
+                raise bad_request("Contraseña requerida para registrar taller")
+            if contrasena != confirmar_contrasena:
+                raise bad_request("Las contraseñas no coinciden")
+            final_password_hash = get_password_hash(contrasena)
+        else:
+            final_password_hash = contrasena_hash
         
         # Validar que el correo no esté duplicado
         usuario_existente = db.query(Usuario).filter(Usuario.correo == correo).first()
@@ -218,7 +228,7 @@ class AuthService:
         # Crear usuario con rol TALLER (pero inactivo hasta aprobación)
         nuevo_usuario = Usuario(
             correo=correo,
-            contrasena_hash=get_password_hash(contrasena),
+            contrasena_hash=final_password_hash,
             nombre_completo=nombre_taller,
             rol=RolUsuario.TALLER,
             es_activo=False,  # El taller solo se activa después de ser aprobado
@@ -227,7 +237,16 @@ class AuthService:
         db.flush()  # Para obtener el id_usuario sin hacer commit
         
         # Crear taller con estado PENDIENTE
+        tenant = TenantTaller(
+            nombre_tenant=nombre_taller,
+            slug_tenant=AuthService._build_tenant_slug(db, nombre_taller),
+            es_activo=True,
+        )
+        db.add(tenant)
+        db.flush()
+
         nuevo_taller = Taller(
+            id_tenant=tenant.id_tenant,
             id_usuario=nuevo_usuario.id_usuario,
             nombre_taller=nombre_taller,
             razon_social=razon_social,
@@ -286,7 +305,34 @@ class AuthService:
                 detalle=f"Usuario inactivo ha intentado iniciar sesión",
             )
             raise unauthorized("Usuario inactivo o no existente")
-        
+
+        # Regla de membresía para talleres: sin membresía activa => suspendido automáticamente
+        if usuario.rol == RolUsuario.TALLER:
+            taller = db.query(Taller).filter(Taller.id_usuario == usuario.id_usuario).first()
+            if taller and taller.estado_aprobacion == EstadoAprobacionTaller.APROBADO:
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
+                active_membership = (
+                    db.query(TallerSubscription)
+                    .filter(
+                        TallerSubscription.id_taller == taller.id_taller,
+                        TallerSubscription.estado == "ACTIVA",
+                        TallerSubscription.fecha_inicio <= now,
+                        TallerSubscription.fecha_fin >= now,
+                    )
+                    .first()
+                )
+                if not active_membership and taller.estado_operativo != EstadoOperativoTaller.SUSPENDIDO:
+                    taller.estado_operativo = EstadoOperativoTaller.SUSPENDIDO
+                    db.commit()
+                    AuthService._registrar_bitacora(
+                        db=db,
+                        usuario_id=str(usuario.id_usuario),
+                        accion="Suspensión automática por membresía inactiva/ausente",
+                        resultado=ResultadoAuditoria.ADVERTENCIA,
+                        detalle=f"Taller suspendido por no contar con membresía activa. Taller: {taller.nombre_taller}",
+                        tipo_actor=TipoActor.SISTEMA,
+                    )
+
         usuario_id_str = str(usuario.id_usuario)
         
         # Validar entorno permitido
@@ -488,3 +534,12 @@ class AuthService:
         if dt_value and dt_value.tzinfo is not None:
             return datetime.now(dt_value.tzinfo)
         return datetime.now(timezone.utc).replace(tzinfo=None)
+    @staticmethod
+    def _build_tenant_slug(db: Session, base_name: str) -> str:
+        base = re.sub(r"[^a-z0-9]+", "-", base_name.lower()).strip("-") or "taller"
+        candidate = base
+        suffix = 1
+        while db.query(TenantTaller).filter(TenantTaller.slug_tenant == candidate).first():
+            suffix += 1
+            candidate = f"{base}-{suffix}"
+        return candidate

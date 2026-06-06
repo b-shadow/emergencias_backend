@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_timeout_seconds: int = 30
 
+    # Stripe (Payments)
+    stripe_secret_key: str = ""
+    stripe_publishable_key: str = ""
+    stripe_webhook_secret: str = ""
+
     model_config = ConfigDict(
         env_file=".env", 
         env_file_encoding="utf-8", 
@@ -103,6 +108,21 @@ class Settings(BaseSettings):
         if not v or v == "":
             return secrets.token_urlsafe(32)
         return v
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug_bool(cls, v):
+        """Permite valores legacy como 'release'/'debug' además de true/false."""
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return False
+        value = str(v).strip().lower()
+        if value in {"1", "true", "yes", "on", "debug", "dev", "development"}:
+            return True
+        if value in {"0", "false", "no", "off", "release", "prod", "production"}:
+            return False
+        return False
 
     @field_validator("FIREBASE_CREDENTIALS_JSON", mode="before")
     @classmethod

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, field_validator
@@ -171,3 +172,68 @@ class TallerRegisterRequest(BaseModel):
         """Valida que las contraseñas coincidan"""
         if self.contrasena != self.confirmar_contrasena:
             raise ValueError("Las contraseñas no coinciden")
+
+class SubscriptionPlanResponse(BaseModel):
+    id_plan: str
+    codigo_plan: str
+    nombre_plan: str
+    descripcion: str | None = None
+    precio_bs: float
+    duracion_dias: int
+    precio_mensual_usd: float
+    stripe_price_id: str | None = None
+
+
+class TallerRegisterCheckoutRequest(TallerRegisterRequest):
+    id_plan: str
+    frontend_base_url: str | None = None
+
+
+class TallerRegisterCheckoutResponse(BaseModel):
+    checkout_url: str
+    checkout_token: str
+    estado: str
+
+
+class TallerRegisterCheckoutValidationResponse(BaseModel):
+    estado: str
+    mensaje: str
+    correo: str | None = None
+
+
+class SubscriptionHistoryItemResponse(BaseModel):
+    id_subscription: str
+    id_plan: str
+    nombre_plan: str
+    codigo_plan: str
+    estado: str
+    fecha_inicio: datetime
+    fecha_fin: datetime
+    fecha_creacion: datetime
+
+
+class SubscriptionManagementResponse(BaseModel):
+    id_taller: str
+    plan_actual: str | None = None
+    codigo_plan_actual: str | None = None
+    estado_suscripcion: str | None = None
+    fecha_inicio: datetime | None = None
+    fecha_fin: datetime | None = None
+    dias_restantes: int | None = None
+    historial: list[SubscriptionHistoryItemResponse]
+
+
+class SubscriptionRenewRequest(BaseModel):
+    id_plan: str
+
+
+class SubscriptionRenewCheckoutRequest(BaseModel):
+    id_plan: str
+    frontend_base_url: str | None = None
+
+
+class SubscriptionAdminActionResponse(BaseModel):
+    mensaje: str
+    id_taller: str
+    estado_suscripcion: str | None = None
+    estado_operativo_taller: str

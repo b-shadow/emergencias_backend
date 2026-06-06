@@ -11,6 +11,7 @@ from app.core.enums import (
     EstadoPostulacion,
     EstadoSolicitud,
     EstadoAsignacion,
+    EstadoOrdenRecojo,
     TipoActor,
     TipoNotificacion,
     CategoriaNotificacion,
@@ -23,7 +24,10 @@ from app.models.taller import Taller
 from app.models.usuario import Usuario
 from app.models.asignacion_atencion import AsignacionAtencion
 from app.models.historial_estado_solicitud import HistorialEstadoSolicitud
+from app.models.orden_recojo import OrdenRecojo
 from app.models.bitacora import Bitacora
+from app.models.trabajador import Trabajador
+from app.models.cotizacion_atencion import CotizacionAtencion
 
 
 class PostulacionService:
@@ -270,7 +274,12 @@ class PostulacionService:
         return postulacion
 
     @staticmethod
-    def accept_postulacion(db: Session, postulacion_id: UUID, current_user: Usuario):
+    def accept_postulacion(
+        db: Session,
+        postulacion_id: UUID,
+        current_user: Usuario,
+        id_trabajador: UUID | None = None,
+    ):
         """
         Acepta una postulación: CLIENTE selecciona el taller (Phase 9).
         - Solo CLIENTE puede aceptar postulaciones de su solicitud
@@ -324,6 +333,15 @@ class PostulacionService:
                 f"Estado actual: {postulacion.estado_postulacion}"
             )
         
+
+        cotizacion = db.query(CotizacionAtencion).filter(
+            CotizacionAtencion.id_postulacion == postulacion_id
+        ).first()
+        if not cotizacion:
+            raise bad_request("Debe existir una cotizacion antes de aceptar la postulacion")
+        if cotizacion.estado_cotizacion.value != "ACEPTADA_CLIENTE":
+            raise bad_request("La cotizacion aun no fue aceptada por el cliente")
+
         # Validar que solicitud esté en estado apropiado
         estados_validos = [
             EstadoSolicitud.REGISTRADA,
@@ -362,6 +380,23 @@ class PostulacionService:
             estado_asignacion=EstadoAsignacion.ACTIVA,
         )
         db.add(asignacion)
+        db.flush()
+
+        # Opcional: crear orden de recojo para trabajador del taller seleccionado
+        if id_trabajador:
+            trabajador = db.query(Trabajador).filter(
+                Trabajador.id_trabajador == id_trabajador,
+                Trabajador.id_taller == postulacion.id_taller,
+                Trabajador.es_activo.is_(True),
+            ).first()
+            if not trabajador:
+                raise bad_request("Trabajador inválido para el taller seleccionado")
+            orden = OrdenRecojo(
+                id_asignacion=asignacion.id_asignacion,
+                id_trabajador=id_trabajador,
+                estado_orden=EstadoOrdenRecojo.PENDIENTE_ACEPTACION,
+            )
+            db.add(orden)
         
         # Actualizar estado de solicitud
         estado_anterior = solicitud.estado_actual

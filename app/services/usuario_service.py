@@ -13,6 +13,11 @@ from app.models.bitacora import Bitacora
 
 class UsuarioService:
     @staticmethod
+    def _validar_rol_global(rol: RolUsuario) -> None:
+        if rol == RolUsuario.TRABAJADOR:
+            raise bad_request("El rol TRABAJADOR no se gestiona desde usuarios globales. Use el modulo de trabajadores del taller.")
+
+    @staticmethod
     def list_usuarios(db: Session):
         """Lista todos los usuarios"""
         return db.query(Usuario).all()
@@ -34,6 +39,8 @@ class UsuarioService:
         usuario = db.query(Usuario).filter(Usuario.correo == data["correo"]).first()
         if usuario:
             raise bad_request("Correo ya registrado")
+
+        UsuarioService._validar_rol_global(data["rol"])
 
         payload = {
             **data,
@@ -90,6 +97,8 @@ class UsuarioService:
         """Actualiza un usuario (mantener compatibilidad con actualización genérica)"""
         usuario = UsuarioService.get_usuario(db, usuario_id)
         payload = {k: v for k, v in data.items() if v is not None}
+        if "rol" in payload:
+            UsuarioService._validar_rol_global(payload["rol"])
         if "contrasena" in payload:
             payload["contrasena_hash"] = get_password_hash(payload.pop("contrasena"))
 
@@ -135,6 +144,7 @@ class UsuarioService:
         # Validar que no sea el mismo rol
         if usuario.rol == nuevo_rol:
             raise bad_request(f"El usuario ya tiene asignado el mismo rol")
+        UsuarioService._validar_rol_global(nuevo_rol)
 
         # Guardar rol antiguo para bitácora
         rol_anterior = usuario.rol

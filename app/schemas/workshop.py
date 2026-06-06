@@ -36,6 +36,7 @@ class TallerUpdate(BaseModel):
 
 class TallerRead(TallerBase):
     id_taller: UUID
+    id_tenant: UUID
     estado_aprobacion: EstadoAprobacionTaller
     estado_operativo: EstadoOperativoTaller
     fecha_registro: datetime
@@ -77,6 +78,7 @@ class TallerPerfilResponse(BaseModel):
     Incluye información completa del taller y del usuario asociado.
     """
     id_taller: UUID
+    id_tenant: UUID
     id_usuario: UUID
     nombre_taller: str
     razon_social: str | None
@@ -91,6 +93,9 @@ class TallerPerfilResponse(BaseModel):
     fecha_registro: datetime
     fecha_aprobacion: datetime | None = None
     correo: str | None = None  # Del usuario relacionado
+    plan_actual: str | None = None
+    fecha_fin_plan: datetime | None = None
+    dias_restantes_plan: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -103,6 +108,7 @@ class TallerPerfilResponse(BaseModel):
 class TallerAdminListItem(BaseModel):
     """Schema para listar talleres en vista administrativa."""
     id_taller: UUID
+    id_tenant: UUID
     id_usuario: UUID
     nombre_taller: str
     razon_social: str | None
@@ -114,6 +120,9 @@ class TallerAdminListItem(BaseModel):
     es_activo: bool  # Estado del usuario
     fecha_registro: datetime
     fecha_aprobacion: datetime | None = None
+    plan_actual: str | None = None
+    fecha_fin_plan: datetime | None = None
+    dias_restantes_plan: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -121,6 +130,7 @@ class TallerAdminListItem(BaseModel):
 class TallerAdminDetail(BaseModel):
     """Schema para detalle administrativo completo de un taller."""
     id_taller: UUID
+    id_tenant: UUID
     id_usuario: UUID
     nombre_taller: str
     razon_social: str | None

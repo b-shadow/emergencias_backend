@@ -37,7 +37,8 @@ def get_asignaciones_activas(
         logger.info(f"GET /asignaciones/activas - Usuario: {current_user.nombre_completo} ({current_user.rol})")
         
         from app.models.taller import Taller
-        from app.core.enums import RolUsuario, EstadoAsignacion
+        from app.core.enums import RolUsuario, EstadoAsignacion, EstadoSolicitud
+        from app.models.solicitud_emergencia import SolicitudEmergencia
         
         if current_user.rol == RolUsuario.TALLER:
             # Buscar el taller del usuario
@@ -49,10 +50,21 @@ def get_asignaciones_activas(
             logger.info(f"Taller encontrado: {taller.nombre_taller}")
             
             # Query con carga lazy de relaciones
-            asignaciones = db.query(AsignacionAtencion).filter(
-                AsignacionAtencion.id_taller == taller.id_taller,
-                AsignacionAtencion.estado_asignacion == EstadoAsignacion.ACTIVA
-            ).all()
+            asignaciones = (
+                db.query(AsignacionAtencion)
+                .join(
+                    SolicitudEmergencia,
+                    AsignacionAtencion.id_solicitud == SolicitudEmergencia.id_solicitud,
+                )
+                .filter(
+                    AsignacionAtencion.id_taller == taller.id_taller,
+                    AsignacionAtencion.estado_asignacion == EstadoAsignacion.ACTIVA,
+                    SolicitudEmergencia.estado_actual.notin_(
+                        [EstadoSolicitud.ATENDIDA, EstadoSolicitud.CANCELADA]
+                    ),
+                )
+                .all()
+            )
         else:
             logger.warning(f"Usuario no es TALLER, es {current_user.rol}")
             return []

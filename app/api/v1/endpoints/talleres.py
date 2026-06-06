@@ -1,4 +1,5 @@
 from uuid import UUID
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -23,10 +24,35 @@ from app.schemas.workshop import (
     TallerPerfilUpdate,
     TallerPerfilResponse,
 )
+from app.schemas.tenant import TenantTallerResponse
+from app.services.tenant_service import TenantService
 from app.services.taller_service import TallerService
+from app.models.taller_subscription import TallerSubscription
+from app.models.subscription_plan import SubscriptionPlan
 
 
 router = APIRouter(dependencies=[Depends(require_roles(RolUsuario.ADMINISTRADOR, RolUsuario.TALLER))])
+
+
+def _get_active_subscription_summary(db: Session, id_taller: UUID) -> tuple[str | None, datetime | None, int | None]:
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    row = (
+        db.query(TallerSubscription, SubscriptionPlan)
+        .join(SubscriptionPlan, SubscriptionPlan.id_plan == TallerSubscription.id_plan)
+        .filter(
+            TallerSubscription.id_taller == id_taller,
+            TallerSubscription.estado == "ACTIVA",
+            TallerSubscription.fecha_fin >= now_utc,
+        )
+        .order_by(TallerSubscription.fecha_fin.desc())
+        .first()
+    )
+    if not row:
+        return (None, None, None)
+
+    sub, plan = row
+    dias_restantes = max(0, (sub.fecha_fin.date() - now_utc.date()).days)
+    return (plan.nombre_plan if plan else None, sub.fecha_fin, dias_restantes)
 
 
 @router.get("", response_model=list[TallerRead])
@@ -40,6 +66,19 @@ def list_talleres(
     - TALLER: Solo ve su propio perfil
     """
     return TallerService.list_talleres(db, current_user)
+
+
+@router.get("/me/tenant", response_model=TenantTallerResponse)
+def get_my_tenant_context(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """
+    Contexto tenant para roles de taller:
+    - TALLER: tenant de su taller
+    - TRABAJADOR: tenant del taller al que pertenece
+    """
+    return TenantService.get_tenant_for_user(db, current_user)
 
 
 @router.post("", response_model=TallerRead, status_code=status.HTTP_201_CREATED)
@@ -94,11 +133,39 @@ def list_talleres_admin(
         correo=correo,
     )
     
-    # Enriquecer respuesta con datos del usuario
+    # Enriquecer respuesta con datos del usuario + plan actual
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    taller_ids = [t.id_taller for t in talleres]
+    active_subscriptions_map: dict[UUID, tuple[str | None, datetime | None, int | None]] = {}
+    if taller_ids:
+        subs = (
+            db.query(TallerSubscription, SubscriptionPlan)
+            .join(SubscriptionPlan, SubscriptionPlan.id_plan == TallerSubscription.id_plan)
+            .filter(
+                TallerSubscription.id_taller.in_(taller_ids),
+                TallerSubscription.estado == "ACTIVA",
+                TallerSubscription.fecha_fin >= now_utc,
+            )
+            .all()
+        )
+        for sub, plan in subs:
+            current = active_subscriptions_map.get(sub.id_taller)
+            if (current is None) or (current[1] is None) or (sub.fecha_fin > current[1]):
+                dias_restantes = (sub.fecha_fin.date() - now_utc.date()).days
+                active_subscriptions_map[sub.id_taller] = (
+                    plan.nombre_plan if plan else None,
+                    sub.fecha_fin,
+                    max(0, dias_restantes),
+                )
+
     resultado = []
     for taller in talleres:
+        plan_actual, fecha_fin_plan, dias_restantes_plan = active_subscriptions_map.get(
+            taller.id_taller, (None, None, None)
+        )
         item = TallerAdminListItem(
             id_taller=taller.id_taller,
+            id_tenant=taller.id_tenant,
             id_usuario=taller.id_usuario,
             nombre_taller=taller.nombre_taller,
             razon_social=taller.razon_social,
@@ -110,6 +177,9 @@ def list_talleres_admin(
             es_activo=taller.usuario.es_activo if taller.usuario else False,
             fecha_registro=taller.fecha_registro,
             fecha_aprobacion=taller.fecha_aprobacion,
+            plan_actual=plan_actual,
+            fecha_fin_plan=fecha_fin_plan,
+            dias_restantes_plan=dias_restantes_plan,
         )
         resultado.append(item)
     
@@ -130,6 +200,7 @@ def get_taller_admin_detail(
     
     return TallerAdminDetail(
         id_taller=taller.id_taller,
+        id_tenant=taller.id_tenant,
         id_usuario=taller.id_usuario,
         nombre_taller=taller.nombre_taller,
         razon_social=taller.razon_social,
@@ -175,6 +246,7 @@ def update_taller_admin(
     
     return TallerAdminDetail(
         id_taller=taller.id_taller,
+        id_tenant=taller.id_tenant,
         id_usuario=taller.id_usuario,
         nombre_taller=taller.nombre_taller,
         razon_social=taller.razon_social,
@@ -211,9 +283,12 @@ def get_my_taller_profile(
     """
     taller = TallerService.get_my_taller_profile(db, current_user)
     
-    # Construir respuesta manualmente para incluir correo del usuario
+    plan_actual, fecha_fin_plan, dias_restantes_plan = _get_active_subscription_summary(db, taller.id_taller)
+
+    # Construir respuesta manualmente para incluir correo del usuario + suscripcion
     return TallerPerfilResponse(
         id_taller=taller.id_taller,
+        id_tenant=taller.id_tenant,
         id_usuario=taller.id_usuario,
         nombre_taller=taller.nombre_taller,
         razon_social=taller.razon_social,
@@ -228,6 +303,9 @@ def get_my_taller_profile(
         fecha_registro=taller.fecha_registro,
         fecha_aprobacion=taller.fecha_aprobacion,
         correo=taller.usuario.correo if taller.usuario else None,
+        plan_actual=plan_actual,
+        fecha_fin_plan=fecha_fin_plan,
+        dias_restantes_plan=dias_restantes_plan,
     )
 
 
@@ -268,9 +346,12 @@ def update_my_taller_profile(
     """
     taller = TallerService.update_my_taller_profile(db, current_user, payload.model_dump())
     
-    # Construir respuesta manualmente para incluir correo del usuario
+    plan_actual, fecha_fin_plan, dias_restantes_plan = _get_active_subscription_summary(db, taller.id_taller)
+
+    # Construir respuesta manualmente para incluir correo del usuario + suscripcion
     return TallerPerfilResponse(
         id_taller=taller.id_taller,
+        id_tenant=taller.id_tenant,
         id_usuario=taller.id_usuario,
         nombre_taller=taller.nombre_taller,
         razon_social=taller.razon_social,
@@ -285,6 +366,9 @@ def update_my_taller_profile(
         fecha_registro=taller.fecha_registro,
         fecha_aprobacion=taller.fecha_aprobacion,
         correo=taller.usuario.correo if taller.usuario else None,
+        plan_actual=plan_actual,
+        fecha_fin_plan=fecha_fin_plan,
+        dias_restantes_plan=dias_restantes_plan,
     )
 
 

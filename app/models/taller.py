@@ -13,6 +13,7 @@ class Taller(Base):
     __tablename__ = "taller"
 
     id_taller: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_tenant: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenant_taller.id_tenant"), nullable=False, index=True)
     id_usuario: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("usuario.id_usuario"), unique=True, nullable=False)
     nombre_taller: Mapped[str] = mapped_column(String(255), nullable=False)
     razon_social: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -28,7 +29,9 @@ class Taller(Base):
     fecha_aprobacion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     usuario = relationship("Usuario", back_populates="taller")
+    tenant = relationship("TenantTaller", back_populates="talleres")
     especialidades = relationship("TallerEspecialidad", back_populates="taller", cascade="all, delete-orphan")
     servicios = relationship("TallerServicio", back_populates="taller", cascade="all, delete-orphan")
     postulaciones = relationship("PostulacionTaller", back_populates="taller")
     asignaciones = relationship("AsignacionAtencion", back_populates="taller")
+    trabajadores = relationship("Trabajador", back_populates="taller", cascade="all, delete-orphan")

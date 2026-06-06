@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from app.core.enums import EstadoAsignacion, EstadoResultado, EstadoSolicitud, NivelUrgencia
 from app.models.asignacion_atencion import AsignacionAtencion
 from app.models.resultado_servicio import ResultadoServicio
+from app.models.servicio import Servicio
 from app.models.solicitud_emergencia import SolicitudEmergencia
 from app.models.taller import Taller
+from app.models.taller_servicio import TallerServicio
 from app.schemas.estadisticas_taller import (
     EstadisticaDemacruzada,
     EstadisticaDiagnostico,
@@ -16,6 +18,9 @@ from app.schemas.estadisticas_taller import (
     EstadisticaTiempoAtencion,
     EstadisticasTallerResponse,
     FiltroReporteAplicado,
+    KPICancelacionTipo,
+    KPIEficienciaServicio,
+    KPIIncidenteTipo,
     OpcionesFiltrosTaller,
     ReporteFiltradoTaller,
     ReporteGraficos,
@@ -142,6 +147,24 @@ class EstadisticasTallerService:
         servicios_completados = EstadisticasTallerService._contar_asignaciones_completadas(
             db, asignaciones
         )
+        tiempo_promedio_asignacion = EstadisticasTallerService._calcular_tiempo_promedio_asignacion(
+            asignaciones
+        )
+        tiempo_promedio_llegada = EstadisticasTallerService._calcular_tiempo_promedio_llegada(
+            asignaciones
+        )
+        incidentes_por_tipo = EstadisticasTallerService._calcular_incidentes_por_tipo(
+            db, asignaciones
+        )
+        zona_mas_incidentes = EstadisticasTallerService._calcular_zona_mas_incidentes(
+            db, asignaciones
+        )
+        cancelaciones_por_tipo = EstadisticasTallerService._calcular_cancelaciones_por_tipo(
+            asignaciones
+        )
+        eficiencia_por_servicio = EstadisticasTallerService._calcular_eficiencia_por_servicio(
+            db, asignaciones
+        )
 
         estadisticas = EstadisticaGeneralTaller(
             fecha_inicio=fecha_inicio,
@@ -159,6 +182,12 @@ class EstadisticasTallerService:
             dias_mayor_demanda=dias_mayor_demanda,
             horas_mayor_demanda=horas_mayor_demanda,
             tiempo_promedio_atencion=tiempo_promedio,
+            tiempo_promedio_asignacion_minutos=tiempo_promedio_asignacion,
+            tiempo_promedio_llegada_minutos=tiempo_promedio_llegada,
+            incidentes_por_tipo=incidentes_por_tipo,
+            zona_mas_incidentes=zona_mas_incidentes,
+            cancelaciones_por_tipo=cancelaciones_por_tipo,
+            eficiencia_por_servicio=eficiencia_por_servicio,
         )
 
         return EstadisticasTallerResponse(
@@ -639,3 +668,139 @@ class EstadisticasTallerService:
         )
 
         return completadas or 0
+
+    @staticmethod
+    def _calcular_tiempo_promedio_asignacion(asignaciones: list[AsignacionAtencion]) -> float:
+        tiempos = []
+        for asignacion in asignaciones:
+            if asignacion.solicitud and asignacion.solicitud.fecha_creacion and asignacion.fecha_asignacion:
+                delta = asignacion.fecha_asignacion - asignacion.solicitud.fecha_creacion
+                tiempos.append(max(delta.total_seconds() / 60, 0))
+        if not tiempos:
+            return 0
+        return round(sum(tiempos) / len(tiempos), 2)
+
+    @staticmethod
+    def _calcular_tiempo_promedio_llegada(asignaciones: list[AsignacionAtencion]) -> float:
+        tiempos = []
+        for asignacion in asignaciones:
+            if asignacion.fecha_inicio_atencion and asignacion.fecha_asignacion:
+                delta = asignacion.fecha_inicio_atencion - asignacion.fecha_asignacion
+                tiempos.append(max(delta.total_seconds() / 60, 0))
+        if not tiempos:
+            return 0
+        return round(sum(tiempos) / len(tiempos), 2)
+
+    @staticmethod
+    def _calcular_incidentes_por_tipo(
+        db: Session,
+        asignaciones: list[AsignacionAtencion],
+    ) -> list[KPIIncidenteTipo]:
+        if not asignaciones:
+            return []
+        solicitud_ids = [a.id_solicitud for a in asignaciones]
+        rows = (
+            db.query(
+                SolicitudEmergencia.categoria_incidente,
+                func.count(SolicitudEmergencia.id_solicitud).label("cantidad"),
+            )
+            .filter(SolicitudEmergencia.id_solicitud.in_(solicitud_ids))
+            .group_by(SolicitudEmergencia.categoria_incidente)
+            .order_by(func.count(SolicitudEmergencia.id_solicitud).desc())
+            .all()
+        )
+        return [
+            KPIIncidenteTipo(tipo=(categoria or "SIN_CATEGORIA"), cantidad=cantidad)
+            for categoria, cantidad in rows
+        ]
+
+    @staticmethod
+    def _calcular_zona_mas_incidentes(
+        db: Session,
+        asignaciones: list[AsignacionAtencion],
+    ) -> str | None:
+        if not asignaciones:
+            return None
+        solicitud_ids = [a.id_solicitud for a in asignaciones]
+        solicitudes = (
+            db.query(SolicitudEmergencia.direccion_referencial)
+            .filter(SolicitudEmergencia.id_solicitud.in_(solicitud_ids))
+            .all()
+        )
+        zonas: dict[str, int] = defaultdict(int)
+        for (direccion,) in solicitudes:
+            if not direccion:
+                continue
+            zona = " ".join(direccion.strip().upper().split()[:3])
+            if zona:
+                zonas[zona] += 1
+        if not zonas:
+            return None
+        return sorted(zonas.items(), key=lambda x: x[1], reverse=True)[0][0]
+
+    @staticmethod
+    def _calcular_cancelaciones_por_tipo(
+        asignaciones: list[AsignacionAtencion],
+    ) -> list[KPICancelacionTipo]:
+        conteo: dict[str, int] = defaultdict(int)
+        for asignacion in asignaciones:
+            if asignacion.estado_asignacion == EstadoAsignacion.CANCELADA:
+                motivo = (asignacion.motivo_cancelacion or "SIN_MOTIVO").upper()
+                conteo[motivo] += 1
+        return [
+            KPICancelacionTipo(motivo=motivo, cantidad=cantidad)
+            for motivo, cantidad in sorted(conteo.items(), key=lambda x: x[1], reverse=True)
+        ]
+
+    @staticmethod
+    def _calcular_eficiencia_por_servicio(
+        db: Session,
+        asignaciones: list[AsignacionAtencion],
+    ) -> list[KPIEficienciaServicio]:
+        if not asignaciones:
+            return []
+        asignacion_ids = [a.id_asignacion for a in asignaciones]
+        resultados = (
+            db.query(
+                ResultadoServicio.id_taller_servicio,
+                ResultadoServicio.estado_resultado,
+            )
+            .filter(ResultadoServicio.id_asignacion.in_(asignacion_ids))
+            .all()
+        )
+        if not resultados:
+            return []
+
+        by_service: dict = defaultdict(lambda: {"total": 0, "completados": 0})
+        for id_taller_servicio, estado in resultados:
+            if not id_taller_servicio:
+                continue
+            by_service[id_taller_servicio]["total"] += 1
+            estado_str = estado.value if hasattr(estado, "value") else str(estado)
+            if estado_str == EstadoResultado.RESUELTO.value:
+                by_service[id_taller_servicio]["completados"] += 1
+
+        servicios = (
+            db.query(TallerServicio, Servicio)
+            .join(Servicio, Servicio.id_servicio == TallerServicio.id_servicio)
+            .filter(TallerServicio.id_taller_servicio.in_(list(by_service.keys())))
+            .all()
+        )
+        respuesta: list[KPIEficienciaServicio] = []
+        for taller_servicio, servicio in servicios:
+            data = by_service.get(taller_servicio.id_taller_servicio)
+            if not data or data["total"] == 0:
+                continue
+            tasa = round((data["completados"] / data["total"]) * 100, 2)
+            respuesta.append(
+                KPIEficienciaServicio(
+                    servicio=servicio.nombre_servicio,
+                    categoria_tarifa=taller_servicio.categoria_tarifa.value
+                    if hasattr(taller_servicio.categoria_tarifa, "value")
+                    else str(taller_servicio.categoria_tarifa),
+                    total=data["total"],
+                    completados=data["completados"],
+                    tasa_completacion=tasa,
+                )
+            )
+        return sorted(respuesta, key=lambda x: x.tasa_completacion, reverse=True)

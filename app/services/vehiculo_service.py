@@ -222,6 +222,8 @@ class VehiculoService:
                 anio=data.get("anio"),
                 color=data.get("color"),
                 tipo_combustible=data.get("tipo_combustible"),
+                tipo_seguro=data.get("tipo_seguro"),
+                aseguradora=data.get("aseguradora"),
                 observaciones=data.get("observaciones"),
                 estado_registro=EstadoRegistroVehiculo.ACTIVO
             )

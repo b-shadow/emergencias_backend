@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.core.enums import EstadoRegistroVehiculo
+from app.core.enums import EstadoRegistroVehiculo, TipoSeguroVehiculo
 
 
 class VehiculoBase(BaseModel):
@@ -14,6 +14,8 @@ class VehiculoBase(BaseModel):
     anio: int | None = None
     color: str | None = Field(default=None, max_length=50)
     tipo_combustible: str | None = Field(default=None, max_length=50)
+    tipo_seguro: TipoSeguroVehiculo = Field(default=TipoSeguroVehiculo.SIN_SEGURO)
+    aseguradora: str | None = Field(default=None, max_length=120)
     observaciones: str | None = Field(default=None, max_length=1000)
 
 
@@ -28,6 +30,8 @@ class VehiculoUpdate(BaseModel):
     anio: int | None = None
     color: str | None = Field(default=None, max_length=50)
     tipo_combustible: str | None = Field(default=None, max_length=50)
+    tipo_seguro: TipoSeguroVehiculo | None = None
+    aseguradora: str | None = Field(default=None, max_length=120)
     observaciones: str | None = Field(default=None, max_length=1000)
     estado_registro: EstadoRegistroVehiculo | None = None
 
@@ -49,6 +53,8 @@ class VehiculoCreateByClient(BaseModel):
     anio: int | None = Field(default=None, ge=1900, le=2100, description="Año de fabricación")
     color: str | None = Field(default=None, max_length=50, description="Color del vehículo")
     tipo_combustible: str | None = Field(default=None, max_length=50, description="Tipo de combustible")
+    tipo_seguro: TipoSeguroVehiculo = Field(default=TipoSeguroVehiculo.SIN_SEGURO)
+    aseguradora: str | None = Field(default=None, max_length=120)
     observaciones: str | None = Field(default=None, max_length=1000, description="Observaciones adicionales")
 
     @field_validator("placa")
@@ -68,6 +74,8 @@ class VehiculoUpdateByClient(BaseModel):
     anio: int | None = Field(default=None, ge=1900, le=2100)
     color: str | None = Field(default=None, max_length=50)
     tipo_combustible: str | None = Field(default=None, max_length=50)
+    tipo_seguro: TipoSeguroVehiculo | None = None
+    aseguradora: str | None = Field(default=None, max_length=120)
     observaciones: str | None = Field(default=None, max_length=1000)
 
     @field_validator("placa")
@@ -88,6 +96,8 @@ class VehiculoResponseClient(BaseModel):
     anio: int | None
     color: str | None
     tipo_combustible: str | None
+    tipo_seguro: TipoSeguroVehiculo
+    aseguradora: str | None
     observaciones: str | None
     estado_registro: EstadoRegistroVehiculo
     fecha_registro: datetime

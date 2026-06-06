@@ -12,7 +12,13 @@ from app.schemas.postulacion import (
     PostulacionResponseWithSolicitud,
     PostulacionActionRequest,
 )
+from app.schemas.cotizacion import (
+    CotizacionCreateRequest,
+    CotizacionClienteDecisionRequest,
+    CotizacionResponse,
+)
 from app.schemas.common import MessageResponse
+from app.services.cotizacion_service import CotizacionService
 from app.services.postulacion_service import PostulacionService
 
 
@@ -93,7 +99,7 @@ def accept_postulacion(
     - Rechaza automáticamente otras postulaciones
     - Crea asignación
     """
-    PostulacionService.accept_postulacion(db, postulacion_id, current_user)
+    PostulacionService.accept_postulacion(db, postulacion_id, current_user, payload.id_trabajador)
     return MessageResponse(message="Postulación aceptada. Taller asignado correctamente")
 
 
@@ -126,3 +132,43 @@ def withdraw_postulacion(
     """
     PostulacionService.withdraw_postulacion(db, postulacion_id, current_user)
     return MessageResponse(message="Postulación retirada")
+
+
+@router.post("/{postulacion_id}/cotizacion", response_model=CotizacionResponse)
+def upsert_cotizacion(
+    postulacion_id: UUID,
+    payload: CotizacionCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    cotizacion = CotizacionService.upsert_cotizacion(
+        db,
+        postulacion_id,
+        payload.model_dump(),
+        current_user,
+    )
+    return cotizacion
+
+
+@router.get("/{postulacion_id}/cotizacion", response_model=CotizacionResponse)
+def get_cotizacion(
+    postulacion_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    return CotizacionService.get_cotizacion(db, postulacion_id, current_user)
+
+
+@router.post("/{postulacion_id}/cotizacion/decision", response_model=MessageResponse)
+def decidir_cotizacion(
+    postulacion_id: UUID,
+    payload: CotizacionClienteDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    CotizacionService.decidir_cotizacion(db, postulacion_id, payload.aceptar, current_user)
+    return MessageResponse(
+        message="Cotización aceptada por cliente"
+        if payload.aceptar
+        else "Cotización rechazada por cliente"
+    )

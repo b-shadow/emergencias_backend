@@ -226,6 +226,10 @@ def get_mi_taller_servicios(
                 estado=ts.servicio.estado,
                 disponible=ts.disponible,
                 observaciones=ts.observaciones,
+                categoria_tarifa=ts.categoria_tarifa,
+                precio_base=ts.precio_base,
+                precio_ida_minimo=ts.precio_ida_minimo,
+                tipo_pintura_chaperio=ts.tipo_pintura_chaperio,
             )
         )
     return result
@@ -261,6 +265,10 @@ def add_servicio_to_mi_taller(
         rol=current_user.rol,
         disponible=payload.disponible,
         observaciones=payload.observaciones,
+        categoria_tarifa=payload.categoria_tarifa,
+        precio_base=payload.precio_base,
+        precio_ida_minimo=payload.precio_ida_minimo,
+        tipo_pintura_chaperio=payload.tipo_pintura_chaperio,
     )
     
     return TallerServicioResponse(
@@ -271,6 +279,10 @@ def add_servicio_to_mi_taller(
         estado=taller_servicio.servicio.estado,
         disponible=taller_servicio.disponible,
         observaciones=taller_servicio.observaciones,
+        categoria_tarifa=taller_servicio.categoria_tarifa,
+        precio_base=taller_servicio.precio_base,
+        precio_ida_minimo=taller_servicio.precio_ida_minimo,
+        tipo_pintura_chaperio=taller_servicio.tipo_pintura_chaperio,
     )
 
 
@@ -334,6 +346,10 @@ def update_servicio_disponibilidad(
         rol=current_user.rol,
         disponible=payload.disponible,
         observaciones=payload.observaciones,
+        categoria_tarifa=payload.categoria_tarifa,
+        precio_base=payload.precio_base,
+        precio_ida_minimo=payload.precio_ida_minimo,
+        tipo_pintura_chaperio=payload.tipo_pintura_chaperio,
     )
     
     return TallerServicioResponse(
@@ -344,4 +360,8 @@ def update_servicio_disponibilidad(
         estado=taller_servicio.servicio.estado,
         disponible=taller_servicio.disponible,
         observaciones=taller_servicio.observaciones,
+        categoria_tarifa=taller_servicio.categoria_tarifa,
+        precio_base=taller_servicio.precio_base,
+        precio_ida_minimo=taller_servicio.precio_ida_minimo,
+        tipo_pintura_chaperio=taller_servicio.tipo_pintura_chaperio,
     )

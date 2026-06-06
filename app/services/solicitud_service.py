@@ -517,6 +517,39 @@ class SolicitudService:
         postulaciones = db.query(PostulacionTaller).filter(
             PostulacionTaller.id_solicitud == solicitud_id
         ).all()
+
+        # CU44: Aplicar cargo de cancelación según política del taller si existe
+        from app.models.politica_cancelacion_taller import PoliticaCancelacionTaller
+        from app.models.cargo_cancelacion_solicitud import CargoCancelacionSolicitud
+
+        id_taller_cargo = None
+        if asignacion_actual:
+            id_taller_cargo = asignacion_actual.id_taller
+        elif postulaciones:
+            # Priorizar postulación aceptada; fallback primera postulación
+            aceptada = next((p for p in postulaciones if getattr(p.estado_postulacion, "value", None) == "ACEPTADA"), None)
+            id_taller_cargo = aceptada.id_taller if aceptada else postulaciones[0].id_taller
+
+        if id_taller_cargo:
+            politica = db.query(PoliticaCancelacionTaller).filter(
+                PoliticaCancelacionTaller.id_taller == id_taller_cargo
+            ).first()
+            if politica and politica.activa and float(politica.monto_penalidad or 0) > 0:
+                cargo = db.query(CargoCancelacionSolicitud).filter(
+                    CargoCancelacionSolicitud.id_solicitud == solicitud_id
+                ).first()
+                if not cargo:
+                    cargo = CargoCancelacionSolicitud(
+                        id_solicitud=solicitud_id,
+                        id_taller=id_taller_cargo,
+                        monto_cargo=float(politica.monto_penalidad),
+                        motivo=razon or "Cancelación con cargo según política del taller",
+                    )
+                    db.add(cargo)
+                else:
+                    cargo.id_taller = id_taller_cargo
+                    cargo.monto_cargo = float(politica.monto_penalidad)
+                    cargo.motivo = razon or cargo.motivo
         
         # Guardar estado anterior
         estado_anterior = solicitud.estado_actual
