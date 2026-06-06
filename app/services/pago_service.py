@@ -10,11 +10,9 @@ from app.core.config import settings
 from app.core.enums import EstadoPostulacion, EstadoSolicitud, RolUsuario
 from app.core.exceptions import bad_request, forbidden, not_found
 from app.models.asignacion_atencion import AsignacionAtencion
-from app.models.cargo_cancelacion_solicitud import CargoCancelacionSolicitud
 from app.models.cliente import Cliente
 from app.models.cotizacion_atencion import CotizacionAtencion
 from app.models.pago_atencion import PagoAtencion
-from app.models.politica_cancelacion_taller import PoliticaCancelacionTaller
 from app.models.postulacion_taller import PostulacionTaller
 from app.models.solicitud_emergencia import SolicitudEmergencia
 from app.models.taller import Taller
@@ -22,6 +20,7 @@ from app.models.taller import Taller
 
 class PagoService:
     STRIPE_API = "https://api.stripe.com/v1"
+    CARGO_CANCELACION_PORCENTAJE = 0.10
 
     @staticmethod
     def _assert_real_stripe() -> None:
@@ -93,10 +92,8 @@ class PagoService:
     @staticmethod
     def _calcular_resumen(db: Session, solicitud: SolicitudEmergencia):
         total_cotizacion, id_taller_cot = PagoService._get_cotizacion_total(db, solicitud.id_solicitud)
-        cargo_row = db.query(CargoCancelacionSolicitud).filter(CargoCancelacionSolicitud.id_solicitud == solicitud.id_solicitud).first()
-        cargo_cancelacion = float(cargo_row.monto_cargo) if cargo_row else 0.0
-
-        total_exigible = cargo_cancelacion if solicitud.estado_actual == EstadoSolicitud.CANCELADA and cargo_cancelacion > 0 else total_cotizacion
+        cargo_cancelacion = round(total_cotizacion * PagoService.CARGO_CANCELACION_PORCENTAJE, 2) if solicitud.estado_actual == EstadoSolicitud.CANCELADA else 0.0
+        total_exigible = cargo_cancelacion if solicitud.estado_actual == EstadoSolicitud.CANCELADA else total_cotizacion
 
         pagos = db.query(PagoAtencion).filter(PagoAtencion.id_solicitud == solicitud.id_solicitud, PagoAtencion.estado_pago == "CONFIRMADO").all()
         total_pagado = float(sum(Decimal(str(p.monto or 0)) for p in pagos))
@@ -109,7 +106,7 @@ class PagoService:
             estado_pago = "PAGO_PARCIAL"
 
         return {
-            "id_taller": cargo_row.id_taller if cargo_row else id_taller_cot,
+            "id_taller": id_taller_cot,
             "total_cotizacion": total_cotizacion,
             "cargo_cancelacion": cargo_cancelacion,
             "total_exigible": total_exigible,
@@ -249,36 +246,3 @@ class PagoService:
         db.commit()
         db.refresh(pago)
         return pago
-
-    @staticmethod
-    def upsert_politica_cancelacion(db: Session, monto_penalidad: float, activa: bool, current_user):
-        if current_user.rol != RolUsuario.TALLER:
-            raise forbidden("Solo el taller puede configurar política de cancelación")
-        taller = db.query(Taller).filter(Taller.id_usuario == current_user.id_usuario).first()
-        if not taller:
-            raise not_found("Taller no encontrado")
-
-        row = db.query(PoliticaCancelacionTaller).filter(PoliticaCancelacionTaller.id_taller == taller.id_taller).first()
-        if not row:
-            row = PoliticaCancelacionTaller(id_taller=taller.id_taller, monto_penalidad=monto_penalidad, activa=activa)
-            db.add(row)
-        else:
-            row.monto_penalidad = monto_penalidad
-            row.activa = activa
-        db.commit()
-        db.refresh(row)
-        return row
-
-    @staticmethod
-    def get_politica_cancelacion(db: Session, current_user):
-        if current_user.rol != RolUsuario.TALLER:
-            raise forbidden("Solo el taller puede ver su política de cancelación")
-        taller = db.query(Taller).filter(Taller.id_usuario == current_user.id_usuario).first()
-        if not taller:
-            raise not_found("Taller no encontrado")
-        row = db.query(PoliticaCancelacionTaller).filter(PoliticaCancelacionTaller.id_taller == taller.id_taller).first()
-        if not row:
-            return {"id_taller": taller.id_taller, "monto_penalidad": 0.0, "activa": False, "fecha_actualizacion": None}
-        return row
-
-

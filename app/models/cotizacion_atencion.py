@@ -25,7 +25,6 @@ class CotizacionAtencion(Base):
         nullable=False,
     )
     precio_servicio: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    costo_ida: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     precio_total_estimado: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     estado_cotizacion: Mapped[EstadoCotizacion] = mapped_column(
         Enum(EstadoCotizacion, name="estado_cotizacion"),

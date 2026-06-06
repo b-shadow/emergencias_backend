@@ -9,8 +9,6 @@ from app.models.usuario import Usuario
 from app.schemas.common import MessageResponse
 from app.schemas.pago import (
     PagoManualRequest,
-    PoliticaCancelacionResponse,
-    PoliticaCancelacionUpsertRequest,
     ResumenPagoResponse,
     StripeConfirmRequest,
     StripePaymentIntentRequest,
@@ -59,20 +57,3 @@ def register_manual_payment(
 ):
     PagoService.registrar_pago_manual_taller(db, id_solicitud, payload.monto, payload.observacion, current_user)
     return MessageResponse(message="Pago manual registrado correctamente")
-
-
-@router.get("/taller/politica-cancelacion", response_model=PoliticaCancelacionResponse)
-def get_politica_cancelacion(
-    db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
-):
-    return PagoService.get_politica_cancelacion(db, current_user)
-
-
-@router.put("/taller/politica-cancelacion", response_model=PoliticaCancelacionResponse)
-def upsert_politica_cancelacion(
-    payload: PoliticaCancelacionUpsertRequest,
-    db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
-):
-    return PagoService.upsert_politica_cancelacion(db, payload.monto_penalidad, payload.activa, current_user)

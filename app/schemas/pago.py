@@ -2,20 +2,6 @@
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-
-
-class PoliticaCancelacionUpsertRequest(BaseModel):
-    monto_penalidad: float = Field(..., ge=0)
-    activa: bool = True
-
-
-class PoliticaCancelacionResponse(BaseModel):
-    id_taller: UUID
-    monto_penalidad: float
-    activa: bool
-    fecha_actualizacion: datetime | None = None
-
-
 class PagoManualRequest(BaseModel):
     monto: float = Field(..., gt=0)
     observacion: str | None = Field(default=None, max_length=1000)

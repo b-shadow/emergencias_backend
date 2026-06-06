@@ -16,7 +16,6 @@ class CotizacionServicioItem(BaseModel):
 
 class CotizacionCreateRequest(BaseModel):
     servicios: list[CotizacionServicioItem] = Field(..., min_length=1)
-    costo_ida: float = Field(default=0, ge=0)
     tipo_pintura: str | None = Field(None, max_length=120)
     detalle: str | None = Field(None, max_length=2000)
 
@@ -30,7 +29,6 @@ class CotizacionResponse(BaseModel):
     id_postulacion: UUID
     id_taller_servicio: UUID
     precio_servicio: float
-    costo_ida: float
     precio_total_estimado: float
     estado_cotizacion: EstadoCotizacion
     tipo_pintura: str | None

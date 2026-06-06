@@ -28,7 +28,6 @@ class TallerServicioResponse(BaseModel):
     observaciones: str | None
     categoria_tarifa: CategoriaTarifaServicio
     precio_base: float
-    precio_ida_minimo: float
     tipo_pintura_chaperio: str | None
 
     class Config:
@@ -41,5 +40,4 @@ class TallerServicioCreate(BaseModel):
     observaciones: str | None = Field(None, max_length=1000, description="Observaciones sobre el servicio")
     categoria_tarifa: CategoriaTarifaServicio = Field(default=CategoriaTarifaServicio.MECANICO)
     precio_base: float = Field(default=0, ge=0)
-    precio_ida_minimo: float = Field(default=0, ge=0)
     tipo_pintura_chaperio: str | None = Field(None, max_length=120)

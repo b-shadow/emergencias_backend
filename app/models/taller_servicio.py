@@ -24,7 +24,6 @@ class TallerServicio(Base):
         default=CategoriaTarifaServicio.MECANICO,
     )
     precio_base: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
-    precio_ida_minimo: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     tipo_pintura_chaperio: Mapped[str | None] = mapped_column(String(120), nullable=True)
     fecha_registro: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

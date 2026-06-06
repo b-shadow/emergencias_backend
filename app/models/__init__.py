@@ -25,8 +25,6 @@ from app.models.subscription_plan import SubscriptionPlan
 from app.models.workshop_checkout import WorkshopCheckout
 from app.models.taller_subscription import TallerSubscription
 from app.models.pago_atencion import PagoAtencion
-from app.models.politica_cancelacion_taller import PoliticaCancelacionTaller
-from app.models.cargo_cancelacion_solicitud import CargoCancelacionSolicitud
 
 __all__ = [
     "Usuario",
@@ -56,8 +54,6 @@ __all__ = [
     "WorkshopCheckout",
     "TallerSubscription",
     "PagoAtencion",
-    "PoliticaCancelacionTaller",
-    "CargoCancelacionSolicitud",
 ]
 
 

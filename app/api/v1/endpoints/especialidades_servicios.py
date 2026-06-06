@@ -228,7 +228,6 @@ def get_mi_taller_servicios(
                 observaciones=ts.observaciones,
                 categoria_tarifa=ts.categoria_tarifa,
                 precio_base=ts.precio_base,
-                precio_ida_minimo=ts.precio_ida_minimo,
                 tipo_pintura_chaperio=ts.tipo_pintura_chaperio,
             )
         )
@@ -267,7 +266,6 @@ def add_servicio_to_mi_taller(
         observaciones=payload.observaciones,
         categoria_tarifa=payload.categoria_tarifa,
         precio_base=payload.precio_base,
-        precio_ida_minimo=payload.precio_ida_minimo,
         tipo_pintura_chaperio=payload.tipo_pintura_chaperio,
     )
     
@@ -281,7 +279,6 @@ def add_servicio_to_mi_taller(
         observaciones=taller_servicio.observaciones,
         categoria_tarifa=taller_servicio.categoria_tarifa,
         precio_base=taller_servicio.precio_base,
-        precio_ida_minimo=taller_servicio.precio_ida_minimo,
         tipo_pintura_chaperio=taller_servicio.tipo_pintura_chaperio,
     )
 
@@ -348,7 +345,6 @@ def update_servicio_disponibilidad(
         observaciones=payload.observaciones,
         categoria_tarifa=payload.categoria_tarifa,
         precio_base=payload.precio_base,
-        precio_ida_minimo=payload.precio_ida_minimo,
         tipo_pintura_chaperio=payload.tipo_pintura_chaperio,
     )
     
@@ -362,6 +358,5 @@ def update_servicio_disponibilidad(
         observaciones=taller_servicio.observaciones,
         categoria_tarifa=taller_servicio.categoria_tarifa,
         precio_base=taller_servicio.precio_base,
-        precio_ida_minimo=taller_servicio.precio_ida_minimo,
         tipo_pintura_chaperio=taller_servicio.tipo_pintura_chaperio,
     )

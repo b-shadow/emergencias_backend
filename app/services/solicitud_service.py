@@ -1,4 +1,4 @@
-from uuid import UUID, uuid4
+﻿from uuid import UUID, uuid4
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ class SolicitudService:
         id_actor: UUID | None = None,
     ) -> None:
         """
-        Registra evento en bitácora para solicitudes.
+        Registra evento en bitÃ¡cora para solicitudes.
         
         Por defecto registra como SISTEMA, pero permite especificar otro tipo_actor e id_actor.
         """
@@ -49,13 +49,13 @@ class SolicitudService:
     @staticmethod
     def _validar_solicitud_request(data: dict, cliente: Cliente) -> dict:
         """
-        Valida que el request tenga la información mínima requerida.
+        Valida que el request tenga la informaciÃ³n mÃ­nima requerida.
         
         Validaciones:
-        - Al menos código_solicitud
-        - O descripción_texto O descripción_audio_url (pero no ambas vacías)
+        - Al menos cÃ³digo_solicitud
+        - O descripciÃ³n_texto O descripciÃ³n_audio_url (pero no ambas vacÃ­as)
         - Si tiene id_vehiculo, debe verificarse que existe
-        - Ubicación idealmente debe tener latitud/longitud
+        - UbicaciÃ³n idealmente debe tener latitud/longitud
         
         Returns:
             dict con datos validados
@@ -63,11 +63,11 @@ class SolicitudService:
         Raises:
             bad_request si no cumple validaciones
         """
-        # Validar código de solicitud
+        # Validar cÃ³digo de solicitud
         if not data.get("codigo_solicitud") or not str(data.get("codigo_solicitud")).strip():
-            raise bad_request("El código de solicitud es requerido")
+            raise bad_request("El cÃ³digo de solicitud es requerido")
         
-        # Validar información mínima de descripción
+        # Validar informaciÃ³n mÃ­nima de descripciÃ³n
         descripcion_texto = data.get("descripcion_texto")
         descripcion_audio_url = data.get("descripcion_audio_url")
         transcripcion_audio = data.get("transcripcion_audio")
@@ -80,18 +80,18 @@ class SolicitudService:
         
         if not (texto_disponible or audio_url_disponible):
             raise bad_request(
-                "E1: Información incompleta. "
-                "Debe proporcionar al menos: descripción de texto o URL de audio"
+                "E1: InformaciÃ³n incompleta. "
+                "Debe proporcionar al menos: descripciÃ³n de texto o URL de audio"
             )
         
-        # Validar vehículo si lo proporciona
+        # Validar vehÃ­culo si lo proporciona
         id_vehiculo = data.get("id_vehiculo")
         if id_vehiculo:
-            # Ya será validado en la BD por FK, pero podemos hacer check anticipado
+            # Ya serÃ¡ validado en la BD por FK, pero podemos hacer check anticipado
             # Por ahora confiaremos en la FK de BD
             pass
         
-        # Validar ubicación (no es requerida pero si existe debe ser válida)
+        # Validar ubicaciÃ³n (no es requerida pero si existe debe ser vÃ¡lida)
         latitud = data.get("latitud")
         longitud = data.get("longitud")
         
@@ -102,7 +102,7 @@ class SolicitudService:
         
         # Si tiene latitud, debe tener longitud y viceversa
         if (latitud is not None and longitud is None) or (latitud is None and longitud is not None):
-            raise bad_request("E2: Ubicación inválida. Si proporciona latitud, debe proporcionar longitud y viceversa")
+            raise bad_request("E2: UbicaciÃ³n invÃ¡lida. Si proporciona latitud, debe proporcionar longitud y viceversa")
         
         return data
     
@@ -130,7 +130,7 @@ class SolicitudService:
     @staticmethod
     def get_solicitud(db: Session, solicitud_id: UUID, current_user: Usuario):
         """
-        Obtiene una solicitud específica.
+        Obtiene una solicitud especÃ­fica.
         - CLIENTE: Solo puede acceder a sus propias solicitudes
         - ADMINISTRADOR/TALLER: Pueden ver cualquier solicitud
         """
@@ -154,16 +154,16 @@ class SolicitudService:
         Obtiene el estado detallado de una solicitud para el caso de uso: Consultar estado.
         
         Incluye:
-        - Información básica de la solicitud (paso 3)
+        - InformaciÃ³n bÃ¡sica de la solicitud (paso 3)
         - Historial de cambios de estado (paso 4)
-        - Información del taller asignado si existe (paso 5)
-        - Progreso de la atención si existe (paso 6)
+        - InformaciÃ³n del taller asignado si existe (paso 5)
+        - Progreso de la atenciÃ³n si existe (paso 6)
         
         Excepciones:
         - E1: Solicitud no encontrada
         - E2: Solicitud sin taller seleccionado (retorna None en asignacion_actual)
         
-        Registra la consulta en bitácora (paso 8)
+        Registra la consulta en bitÃ¡cora (paso 8)
         
         Returns:
             Diccionario con solicitud y sus detalles relacionados
@@ -176,13 +176,13 @@ class SolicitudService:
             HistorialEstadoSolicitud.id_solicitud == solicitud_id
         ).order_by(HistorialEstadoSolicitud.fecha_cambio.asc()).all()
         
-        # Obtener asignación actual si existe (paso 5, E2)
+        # Obtener asignaciÃ³n actual si existe (paso 5, E2)
         from app.models.asignacion_atencion import AsignacionAtencion
         asignacion_actual = db.query(AsignacionAtencion).filter(
             AsignacionAtencion.id_solicitud == solicitud_id
         ).order_by(AsignacionAtencion.fecha_asignacion.desc()).first()
         
-        # Registrar consulta en bitácora (paso 8)
+        # Registrar consulta en bitÃ¡cora (paso 8)
         detalle = f"Consulta de estado. Solicitud: {solicitud.codigo_solicitud}"
         if asignacion_actual:
             detalle += f". Taller asignado"
@@ -197,7 +197,7 @@ class SolicitudService:
             id_entidad=solicitud_id,
         )
         
-        logger.info(f"Cliente consultó estado de solicitud {solicitud_id}")
+        logger.info(f"Cliente consultÃ³ estado de solicitud {solicitud_id}")
         
         return {
             "solicitud": solicitud,
@@ -213,44 +213,44 @@ class SolicitudService:
         Validaciones (Caso de Uso: Registrar emergencia vehicular):
         - Solo CLIENTE puede crear solicitudes
         - Cliente debe existir
-        - Información mínima requerida (E1)
-        - Ubicación válida si se proporciona (E2)
-        - Vehículo válido si se proporciona (E4)
+        - InformaciÃ³n mÃ­nima requerida (E1)
+        - UbicaciÃ³n vÃ¡lida si se proporciona (E2)
+        - VehÃ­culo vÃ¡lido si se proporciona (E4)
         
-        Registra en bitácora al completar exitosamente
+        Registra en bitÃ¡cora al completar exitosamente
         """
-        # Validación: Solo CLIENTE puede crear
+        # ValidaciÃ³n: Solo CLIENTE puede crear
         if current_user.rol != RolUsuario.CLIENTE:
             raise forbidden("Solo los clientes pueden registrar solicitudes de emergencia")
         
-        # Validación: Cliente debe existir
+        # ValidaciÃ³n: Cliente debe existir
         cliente = db.query(Cliente).filter(Cliente.id_usuario == current_user.id_usuario).first()
         if not cliente:
-            raise forbidden("No se encontró tu perfil de cliente")
+            raise forbidden("No se encontrÃ³ tu perfil de cliente")
         
         # Validar request completo
         data = SolicitudService._validar_solicitud_request(data, cliente)
         
-        # Validación E4: Si proporciona vehículo, debe ser válido
+        # ValidaciÃ³n E4: Si proporciona vehÃ­culo, debe ser vÃ¡lido
         id_vehiculo = data.get("id_vehiculo")
         if id_vehiculo:
-            # Verificar que el vehículo existe y pertenece al cliente
+            # Verificar que el vehÃ­culo existe y pertenece al cliente
             vehiculo = db.query(Vehiculo).filter(
                 Vehiculo.id_vehiculo == id_vehiculo,
                 Vehiculo.id_cliente == cliente.id_cliente
             ).first()
             if not vehiculo:
                 raise bad_request(
-                    "E4: Vehículo no disponible. "
-                    "El vehículo seleccionado no existe o no te pertenece"
+                    "E4: VehÃ­culo no disponible. "
+                    "El vehÃ­culo seleccionado no existe o no te pertenece"
                 )
         else:
-            # Verificar que el cliente tenga al menos un vehículo
+            # Verificar que el cliente tenga al menos un vehÃ­culo
             vehiculos = db.query(Vehiculo).filter(Vehiculo.id_cliente == cliente.id_cliente).all()
             if not vehiculos:
                 raise bad_request(
-                    "E4: Vehículo no disponible. "
-                    "Debes registrar al menos un vehículo antes de crear una solicitud"
+                    "E4: VehÃ­culo no disponible. "
+                    "Debes registrar al menos un vehÃ­culo antes de crear una solicitud"
                 )
         
         # Asignar cliente y estado inicial
@@ -295,10 +295,10 @@ class SolicitudService:
         db.commit()
         db.refresh(solicitud)
         
-        # Registrar en bitácora (como indica paso 11 del caso de uso)
-        detalle = f"Solicitud creada exitosamente. Código: {solicitud.codigo_solicitud}"
+        # Registrar en bitÃ¡cora (como indica paso 11 del caso de uso)
+        detalle = f"Solicitud creada exitosamente. CÃ³digo: {solicitud.codigo_solicitud}"
         if solicitud.id_vehiculo:
-            detalle += f". Vehículo asociado."
+            detalle += f". VehÃ­culo asociado."
         SolicitudService._registrar_bitacora(
             db=db,
             accion="Solicitud de emergencia registrada",
@@ -327,10 +327,10 @@ class SolicitudService:
             else:
                 logger.info(f"Encontrados {len(talleres_disponibles)} talleres disponibles. Enviando notificaciones...")
                 
-                # Enviar notificación a cada taller disponible
+                # Enviar notificaciÃ³n a cada taller disponible
                 for taller in talleres_disponibles:
                     try:
-                        # Calcular distancia si ambos tienen ubicación
+                        # Calcular distancia si ambos tienen ubicaciÃ³n
                         distancia_km = 0
                         if (solicitud.latitud and solicitud.longitud and 
                             taller.latitud and taller.longitud):
@@ -342,11 +342,11 @@ class SolicitudService:
                             )
                         
                         if taller.id_usuario:
-                            # Enviar notificación al propietario del taller
+                            # Enviar notificaciÃ³n al propietario del taller
                             titulo_notif = "Nueva Solicitud de Emergencia Disponible"
                             mensaje_notif = (
                                 f"Se ha registrado una nueva emergencia vehicular. "
-                                f"Código: {solicitud.codigo_solicitud}"
+                                f"CÃ³digo: {solicitud.codigo_solicitud}"
                             )
                             
                             NotificacionService.send_notification_to_user(
@@ -366,15 +366,15 @@ class SolicitudService:
                                     "accion": "ver_solicitud_disponible"
                                 }
                             )
-                            logger.info(f"Notificación enviada a {taller.nombre_taller} para solicitud {solicitud.codigo_solicitud}")
+                            logger.info(f"NotificaciÃ³n enviada a {taller.nombre_taller} para solicitud {solicitud.codigo_solicitud}")
                     except Exception as e:
-                        logger.error(f"Error enviando notificación a taller {taller.nombre_taller}: {e}")
-                        # Continuar con los demás talleres
+                        logger.error(f"Error enviando notificaciÃ³n a taller {taller.nombre_taller}: {e}")
+                        # Continuar con los demÃ¡s talleres
                         continue
                 
                 logger.info(f"Notificaciones enviadas a {len(talleres_disponibles)} taller(es) para solicitud {solicitud.codigo_solicitud}")
         except Exception as e:
-            # Si hay error en envío de notificaciones, loguear pero no fallar
+            # Si hay error en envÃ­o de notificaciones, loguear pero no fallar
             logger.error(f"Error enviando notificaciones a talleres: {e}")
         
         return solicitud
@@ -409,7 +409,7 @@ class SolicitudService:
             }
             data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
         else:
-            # Administrador puede actualizar más campos
+            # Administrador puede actualizar mÃ¡s campos
             data = {k: v for k, v in data.items() if v is not None}
         
         # Actualizar campos simples
@@ -447,8 +447,8 @@ class SolicitudService:
         db.commit()
         db.refresh(solicitud)
         
-        # Registrar en bitácora
-        detalle = f"Solicitud actualizada. Código: {solicitud.codigo_solicitud}"
+        # Registrar en bitÃ¡cora
+        detalle = f"Solicitud actualizada. CÃ³digo: {solicitud.codigo_solicitud}"
         if id_especialidades is not None:
             detalle += f". Especialidades actualizadas ({len(id_especialidades)} seleccionadas)"
         if id_servicios is not None:
@@ -468,97 +468,30 @@ class SolicitudService:
 
     @staticmethod
     def cancel_solicitud(db: Session, solicitud_id: UUID, current_user: Usuario, razon: str = None):
-        """
-        Cancela una solicitud de emergencia.
-        
-        Flujo (Caso de Uso):
-        1. Obtiene la solicitud (validar acceso)
-        2. Valida que se pueda cancelar (E1)
-        3. Obtiene asignaciones/postulaciones existentes
-        4. Actualiza estado a CANCELADA
-        5. Registra en historial
-        6. Notifica a talleres involucrados (E2)
-        7. Registra en bitácora
-        
-        Excepciones:
-        - E1: Solicitud no disponible para cancelación (ya atendida, finalizada, cerrada)
-        - E2: Cancelación con taller seleccionado (notifica al taller)
-        
-        Precondiciones:
-        - CLIENTE solo puede cancelar sus propias solicitudes
-        - ADMINISTRADOR puede cancelar cualquiera
-        - Solicitud debe estar en estado cancelable
-        """
-        # Paso 1: Obtener y validar acceso a la solicitud
         solicitud = SolicitudService.get_solicitud(db, solicitud_id, current_user)
-        
-        # Paso 2: Validar que está en estado cancelable (E1)
+
         estados_no_cancelables = [
             EstadoSolicitud.ATENDIDA,
-            EstadoSolicitud.CANCELADA,
+            EstadoSolicitud.FINALIZADA,
+            EstadoSolicitud.CERRADA,
         ]
-        
         if solicitud.estado_actual in estados_no_cancelables:
             raise bad_request(
                 f"E1 - No se puede cancelar una solicitud en estado {solicitud.estado_actual.value}. "
                 "La solicitud ya no está disponible para cancelación."
             )
-        
-        # Paso 3: Obtener asignaciones/talleres involucrados (E2)
+
         from app.models.asignacion_atencion import AsignacionAtencion
         from app.models.postulacion_taller import PostulacionTaller
-        from app.models.notificacion import Notificacion
-        from app.core.enums import TipoNotificacion, CategoriaNotificacion, EstadoLecturaNotificacion, EstadoEnvioNotificacion
-        
-        asignacion_actual = db.query(AsignacionAtencion).filter(
-            AsignacionAtencion.id_solicitud == solicitud_id
-        ).first()
-        
-        postulaciones = db.query(PostulacionTaller).filter(
-            PostulacionTaller.id_solicitud == solicitud_id
-        ).all()
+        from app.core.enums import TipoNotificacion, CategoriaNotificacion
 
-        # CU44: Aplicar cargo de cancelación según política del taller si existe
-        from app.models.politica_cancelacion_taller import PoliticaCancelacionTaller
-        from app.models.cargo_cancelacion_solicitud import CargoCancelacionSolicitud
+        asignacion_actual = db.query(AsignacionAtencion).filter(AsignacionAtencion.id_solicitud == solicitud_id).first()
+        postulaciones = db.query(PostulacionTaller).filter(PostulacionTaller.id_solicitud == solicitud_id).all()
 
-        id_taller_cargo = None
-        if asignacion_actual:
-            id_taller_cargo = asignacion_actual.id_taller
-        elif postulaciones:
-            # Priorizar postulación aceptada; fallback primera postulación
-            aceptada = next((p for p in postulaciones if getattr(p.estado_postulacion, "value", None) == "ACEPTADA"), None)
-            id_taller_cargo = aceptada.id_taller if aceptada else postulaciones[0].id_taller
-
-        if id_taller_cargo:
-            politica = db.query(PoliticaCancelacionTaller).filter(
-                PoliticaCancelacionTaller.id_taller == id_taller_cargo
-            ).first()
-            if politica and politica.activa and float(politica.monto_penalidad or 0) > 0:
-                cargo = db.query(CargoCancelacionSolicitud).filter(
-                    CargoCancelacionSolicitud.id_solicitud == solicitud_id
-                ).first()
-                if not cargo:
-                    cargo = CargoCancelacionSolicitud(
-                        id_solicitud=solicitud_id,
-                        id_taller=id_taller_cargo,
-                        monto_cargo=float(politica.monto_penalidad),
-                        motivo=razon or "Cancelación con cargo según política del taller",
-                    )
-                    db.add(cargo)
-                else:
-                    cargo.id_taller = id_taller_cargo
-                    cargo.monto_cargo = float(politica.monto_penalidad)
-                    cargo.motivo = razon or cargo.motivo
-        
-        # Guardar estado anterior
         estado_anterior = solicitud.estado_actual
-        
-        # Paso 4: Actualizar estado a CANCELADA
         solicitud.estado_actual = EstadoSolicitud.CANCELADA
         solicitud.fecha_cierre = datetime.now()
-        
-        # Paso 5: Registrar en historial
+
         historial = HistorialEstadoSolicitud(
             id_historial_estado=uuid4(),
             id_solicitud=solicitud.id_solicitud,
@@ -570,69 +503,57 @@ class SolicitudService:
         )
         db.add(historial)
         db.flush()
-        
-        # Paso 6: Notificar a talleres involucrados (E2) usando servicio central
+
         talleres_notificados = set()
-        
-        # Si hay asignación actual, notificar al taller asignado
-        if asignacion_actual:
+        if asignacion_actual and asignacion_actual.taller and asignacion_actual.taller.id_taller not in talleres_notificados:
             taller = asignacion_actual.taller
-            if taller and taller.id_taller not in talleres_notificados:
-                NotificacionService.send_notification_to_user(
-                    db=db,
-                    id_usuario_destino=taller.id_usuario,
-                    tipo_usuario_destino="taller",
-                    titulo="Solicitud Cancelada",
-                    mensaje=f"La solicitud {solicitud.codigo_solicitud} ha sido cancelada por el cliente. " +
-                            f"Motivo: {razon or 'No especificado'}",
-                    tipo_notificacion=TipoNotificacion.PUSH,
-                    categoria_evento=CategoriaNotificacion.ESTADO,
-                    referencia_entidad="SolicitudEmergencia",
-                    referencia_id=str(solicitud.id_solicitud),
-                    actor_id=current_user.id_usuario,
-                    actor_tipo=TipoActor.CLIENTE if current_user.rol == RolUsuario.CLIENTE else TipoActor.ADMINISTRADOR,
-                )
-                talleres_notificados.add(taller.id_taller)
-                logger.info(f"Notificación enviada a taller {taller.id_taller} sobre cancelación")
-        
-        # Notificar a talleres con postulaciones pendientes
-        for postulacion in postulaciones:
-            if postulacion.taller.id_taller not in talleres_notificados:
-                NotificacionService.send_notification_to_user(
-                    db=db,
-                    id_usuario_destino=postulacion.taller.id_usuario,
-                    tipo_usuario_destino="taller",
-                    titulo="Solicitud Cancelada",
-                    mensaje=f"La solicitud {solicitud.codigo_solicitud} ha sido cancelada. " +
-                            f"Su postulación ha sido retirada. Motivo: {razon or 'No especificado'}",
-                    tipo_notificacion=TipoNotificacion.PUSH,
-                    categoria_evento=CategoriaNotificacion.ESTADO,
-                    referencia_entidad="SolicitudEmergencia",
-                    referencia_id=str(solicitud.id_solicitud),
-                    actor_id=current_user.id_usuario,
-                    actor_tipo=TipoActor.CLIENTE if current_user.rol == RolUsuario.CLIENTE else TipoActor.ADMINISTRADOR,
-                )
-                talleres_notificados.add(postulacion.taller.id_taller)
-                logger.info(f"Notificación enviada a taller {postulacion.taller.id_taller} sobre cancelación")
-        
-        # Paso 7: Registrar en bitácora
+            NotificacionService.send_notification_to_user(
+                db=db,
+                id_usuario_destino=taller.id_usuario,
+                tipo_usuario_destino="taller",
+                titulo="Solicitud Cancelada",
+                mensaje=f"La solicitud {solicitud.codigo_solicitud} ha sido cancelada por el cliente. Motivo: {razon or 'No especificado'}",
+                tipo_notificacion=TipoNotificacion.PUSH,
+                categoria_evento=CategoriaNotificacion.ESTADO,
+                referencia_entidad="SolicitudEmergencia",
+                referencia_id=solicitud_id,
+                data={"solicitud_codigo": solicitud.codigo_solicitud, "accion": "solicitud_cancelada"},
+            )
+            talleres_notificados.add(taller.id_taller)
+        elif postulaciones:
+            for postulacion in postulaciones:
+                taller = postulacion.taller
+                if taller and taller.id_taller not in talleres_notificados:
+                    NotificacionService.send_notification_to_user(
+                        db=db,
+                        id_usuario_destino=taller.id_usuario,
+                        tipo_usuario_destino="taller",
+                        titulo="Solicitud Cancelada",
+                        mensaje=f"La solicitud {solicitud.codigo_solicitud} ha sido cancelada. Motivo: {razon or 'No especificado'}",
+                        tipo_notificacion=TipoNotificacion.PUSH,
+                        categoria_evento=CategoriaNotificacion.ESTADO,
+                        referencia_entidad="SolicitudEmergencia",
+                        referencia_id=solicitud_id,
+                        data={"solicitud_codigo": solicitud.codigo_solicitud, "accion": "solicitud_cancelada"},
+                    )
+                    talleres_notificados.add(taller.id_taller)
+
         SolicitudService._registrar_bitacora(
             db=db,
             accion="Cancelación de solicitud",
             resultado=ResultadoAuditoria.EXITO,
-            detalle=f"Solicitud {solicitud.codigo_solicitud} cancelada. Motivo: {razon or 'No especificado'}. " +
-                   f"Talleres notificados: {len(talleres_notificados)}",
+            detalle=f"Solicitud {solicitud.codigo_solicitud} cancelada. Motivo: {razon or 'No especificado'}. Talleres notificados: {len(talleres_notificados)}",
             id_entidad=solicitud_id,
             tipo_actor=TipoActor.CLIENTE if current_user.rol == RolUsuario.CLIENTE else TipoActor.ADMINISTRADOR,
             id_actor=current_user.id_usuario,
         )
-        
+
         db.commit()
         db.refresh(solicitud)
-        
-        logger.info(f"Solicitud {solicitud_id} cancelada correctamente. "
-                   f"Estado anterior: {estado_anterior}. Talleres notificados: {len(talleres_notificados)}")
-        
+        logger.info(
+            f"Solicitud {solicitud_id} cancelada correctamente. Estado anterior: {estado_anterior}. Talleres notificados: {len(talleres_notificados)}"
+        )
+
         return solicitud
 
     @staticmethod
@@ -648,30 +569,30 @@ class SolicitudService:
         Obtiene el historial de solicitudes del cliente (Caso de Uso: Consultar historial).
         
         Flujo:
-        1. Cliente accede a sección de historial (paso 1)
+        1. Cliente accede a secciÃ³n de historial (paso 1)
         2. Sistema consulta solicitudes del cliente (paso 2)
         3. Sistema muestra listado ordenado por fecha o estado (paso 3)
         
         Excepciones:
-        - E1: Historial vacío (retorna lista vacía)
+        - E1: Historial vacÃ­o (retorna lista vacÃ­a)
         
-        Registra la consulta en bitácora (paso 8)
+        Registra la consulta en bitÃ¡cora (paso 8)
         
         Args:
             db: Session de BD
             current_user: Usuario actual
             orden_por: "fecha" o "estado" (default: fecha)
-            descendente: True = más recientes primero (default: True)
-            skip: Paginación offset
-            limit: Paginación limit
+            descendente: True = mÃ¡s recientes primero (default: True)
+            skip: PaginaciÃ³n offset
+            limit: PaginaciÃ³n limit
         
         Returns:
-            Dict con estadísticas y lista de solicitudes
+            Dict con estadÃ­sticas y lista de solicitudes
         """
         # Obtener cliente
         cliente = db.query(Cliente).filter(Cliente.id_usuario == current_user.id_usuario).first()
         if not cliente:
-            raise forbidden("No se encontró tu perfil de cliente")
+            raise forbidden("No se encontrÃ³ tu perfil de cliente")
         
         # Consultar todas las solicitudes del cliente
         query = db.query(SolicitudEmergencia).filter(
@@ -696,22 +617,22 @@ class SolicitudService:
         ).count()
         total_activas = total_solicitudes - total_finalizadas
         
-        # Aplicar paginación
+        # Aplicar paginaciÃ³n
         solicitudes = query.offset(skip).limit(limit).all()
         
-        # Registrar consulta en bitácora (paso 8)
+        # Registrar consulta en bitÃ¡cora (paso 8)
         SolicitudService._registrar_bitacora(
             db=db,
             accion="Consulta de historial de solicitudes",
             resultado=ResultadoAuditoria.EXITO,
-            detalle=f"Cliente consultó historial. Total: {total_solicitudes}, " +
+            detalle=f"Cliente consultÃ³ historial. Total: {total_solicitudes}, " +
                    f"Finalizadas: {total_finalizadas}, Activas: {total_activas}",
             id_entidad=cliente.id_cliente,
             tipo_actor=TipoActor.CLIENTE,
             id_actor=current_user.id_usuario,
         )
         
-        logger.info(f"Cliente {cliente.id_cliente} consultó historial de {total_solicitudes} solicitudes")
+        logger.info(f"Cliente {cliente.id_cliente} consultÃ³ historial de {total_solicitudes} solicitudes")
         
         return {
             "total_solicitudes": total_solicitudes,
@@ -728,20 +649,20 @@ class SolicitudService:
         Flujo:
         4. Cliente selecciona una solicitud del historial (paso 4)
         5. Sistema muestra el detalle completo (paso 5)
-        6. El detalle incluye: vehículo, descripción, ubicación, estado, taller que atendió (paso 6)
-        7. Cliente revisa información (paso 7)
-        8. Sistema registra la consulta en bitácora (paso 8)
+        6. El detalle incluye: vehÃ­culo, descripciÃ³n, ubicaciÃ³n, estado, taller que atendiÃ³ (paso 6)
+        7. Cliente revisa informaciÃ³n (paso 7)
+        8. Sistema registra la consulta en bitÃ¡cora (paso 8)
         
         Excepciones:
         - E2: Solicitud no encontrada
         
         Returns:
-            Dict con información completa de la solicitud
+            Dict con informaciÃ³n completa de la solicitud
         """
         # Validar acceso (ownership) - E2: Solicitud no encontrada
         solicitud = SolicitudService.get_solicitud(db, solicitud_id, current_user)
         
-        # Obtener vehículo si existe
+        # Obtener vehÃ­culo si existe
         vehiculo = None
         if solicitud.id_vehiculo:
             vehiculo = db.query(Vehiculo).filter(
@@ -769,19 +690,19 @@ class SolicitudService:
             HistorialEstadoSolicitud.id_solicitud == solicitud_id
         ).order_by(HistorialEstadoSolicitud.fecha_cambio.asc()).all()
         
-        # Registrar consulta en bitácora (paso 8)
+        # Registrar consulta en bitÃ¡cora (paso 8)
         SolicitudService._registrar_bitacora(
             db=db,
             accion="Consulta de detalle de historial",
             resultado=ResultadoAuditoria.EXITO,
-            detalle=f"Cliente consultó detalle de solicitud {solicitud.codigo_solicitud}. " +
+            detalle=f"Cliente consultÃ³ detalle de solicitud {solicitud.codigo_solicitud}. " +
                    f"Estado: {solicitud.estado_actual.value}",
             id_entidad=solicitud_id,
             tipo_actor=TipoActor.CLIENTE,
             id_actor=current_user.id_usuario,
         )
         
-        logger.info(f"Cliente consultó detalle de solicitud {solicitud_id}")
+        logger.info(f"Cliente consultÃ³ detalle de solicitud {solicitud_id}")
         
         return {
             "solicitud": solicitud,
@@ -794,15 +715,15 @@ class SolicitudService:
     @staticmethod
     def _calcular_distancia_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         """
-        Calcula la distancia en kilómetros entre dos puntos geográficos
-        usando la fórmula haversine.
+        Calcula la distancia en kilÃ³metros entre dos puntos geogrÃ¡ficos
+        usando la fÃ³rmula haversine.
         
         Args:
             lat1, lon1: Coordenadas del primer punto (latitud, longitud)
             lat2, lon2: Coordenadas del segundo punto (latitud, longitud)
             
         Returns:
-            Distancia en kilómetros
+            Distancia en kilÃ³metros
         """
         import math
         
@@ -823,7 +744,7 @@ class SolicitudService:
         dlat = lat2_rad - lat1_rad
         dlon = lon2_rad - lon1_rad
         
-        # Fórmula haversine
+        # FÃ³rmula haversine
         a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
         c = 2 * math.asin(math.sqrt(a))
         distancia = radio_tierra_km * c
@@ -843,52 +764,52 @@ class SolicitudService:
         
         Flujo:
         1. Taller accede a ver solicitudes disponibles (paso 1)
-        2. Sistema valida que taller está aprobado y habilitado (paso 2, E3)
+        2. Sistema valida que taller estÃ¡ aprobado y habilitado (paso 2, E3)
         3. Sistema valida que tiene especialidades registradas (paso 2, E3)
         4. Sistema consulta solicitudes compatibles (paso 3):
-           - En estados REGISTRADA o ASIGNADA (disponibles para postulación)
-           - Cuya categoría coincide con especialidades del taller
-           - Dentro de radio de búsqueda del taller usando distancia
+           - En estados REGISTRADA o ASIGNADA (disponibles para postulaciÃ³n)
+           - Cuya categorÃ­a coincide con especialidades del taller
+           - Dentro de radio de bÃºsqueda del taller usando distancia
         5. Sistema calcula distancia para cada solicitud (paso 4)
-        6. Sistema agrupa por especialidad para estadísticas (paso 5)
+        6. Sistema agrupa por especialidad para estadÃ­sticas (paso 5)
         7. Taller revisa listado (paso 6)
-        8. Sistema registra consulta en bitácora (paso 7)
+        8. Sistema registra consulta en bitÃ¡cora (paso 7)
         
         Excepciones:
-        - E1: No hay solicitudes disponibles (retorna lista vacía con mensaje)
+        - E1: No hay solicitudes disponibles (retorna lista vacÃ­a con mensaje)
         - E3: Taller sin especialidades o no aprobado (bad_request)
         
         Returns:
-            Dict con estadísticas y lista de solicitudes disponibles
+            Dict con estadÃ­sticas y lista de solicitudes disponibles
         """
         from app.models.taller import Taller
         from app.models.taller_especialidad import TallerEspecialidad
         from app.models.especialidad import Especialidad
         from app.models.asignacion_atencion import AsignacionAtencion
         
-        # Validación: Solo TALLER puede acceder
+        # ValidaciÃ³n: Solo TALLER puede acceder
         if current_user.rol != RolUsuario.TALLER:
             raise forbidden("Solo los talleres pueden consultar solicitudes disponibles")
         
         # Paso 2: Obtener taller y validar estado (E3)
         taller = db.query(Taller).filter(Taller.id_usuario == current_user.id_usuario).first()
         if not taller:
-            raise bad_request("E3: No se encontró el perfil de taller")
+            raise bad_request("E3: No se encontrÃ³ el perfil de taller")
         
-        # Validar que taller esté aprobado y habilitado
+        # Validar que taller estÃ© aprobado y habilitado
         from app.core.enums import EstadoAprobacionTaller, EstadoOperativoTaller
         if taller.estado_aprobacion != EstadoAprobacionTaller.APROBADO:
             raise bad_request(
                 f"E3: Taller no aprobado. "
                 f"Estado: {taller.estado_aprobacion.value}. "
-                "Contacta con administración."
+                "Contacta con administraciÃ³n."
             )
         
         if taller.estado_operativo != EstadoOperativoTaller.DISPONIBLE:
             raise bad_request(
                 f"E3: Taller no habilitado operativamente. "
                 f"Estado: {taller.estado_operativo.value}. "
-                "Contacta con administración."
+                "Contacta con administraciÃ³n."
             )
         
         # Validar que tiene especialidades registradas (E3)
@@ -903,7 +824,7 @@ class SolicitudService:
             )
         
         # Paso 3-4: Consultar solicitudes compatibles
-        # Obtener todas las solicitudes sin validación de categoría
+        # Obtener todas las solicitudes sin validaciÃ³n de categorÃ­a
         
         solicitudes = db.query(SolicitudEmergencia).filter(
             SolicitudEmergencia.estado_actual.in_([
@@ -927,7 +848,7 @@ class SolicitudService:
                     solicitud.latitud,
                     solicitud.longitud
                 )
-                # Filtro: Distancia debe estar dentro del radio de búsqueda de la solicitud
+                # Filtro: Distancia debe estar dentro del radio de bÃºsqueda de la solicitud
                 if solicitud.radio_busqueda_km and distancia_km > solicitud.radio_busqueda_km:
                     continue
             
@@ -944,21 +865,21 @@ class SolicitudService:
                 cantidad_por_especialidad[categoria] = 0
             cantidad_por_especialidad[categoria] += 1
         
-        # Ordenar por distancia (más cercanas primero)
+        # Ordenar por distancia (mÃ¡s cercanas primero)
         solicitudes_disponibles.sort(
             key=lambda x: x["distancia_km"] if x["distancia_km"] is not None else float("inf")
         )
         
-        # Paginación
+        # PaginaciÃ³n
         total_disponibles = len(solicitudes_disponibles)
         solicitudes_paginadas = solicitudes_disponibles[skip:skip + limit]
         
-        # Paso 7: Registrar en bitácora
+        # Paso 7: Registrar en bitÃ¡cora
         SolicitudService._registrar_bitacora(
             db=db,
             accion="Consulta de solicitudes disponibles",
             resultado=ResultadoAuditoria.EXITO,
-            detalle=f"Taller consultó solicitudes disponibles. " +
+            detalle=f"Taller consultÃ³ solicitudes disponibles. " +
                    f"Total disponibles: {total_disponibles}. " +
                    f"Breakdown: {cantidad_por_especialidad}",
             id_entidad=taller.id_taller,
@@ -966,7 +887,7 @@ class SolicitudService:
             id_actor=current_user.id_usuario,
         )
         
-        logger.info(f"Taller {taller.id_taller} consultó {total_disponibles} solicitudes disponibles")
+        logger.info(f"Taller {taller.id_taller} consultÃ³ {total_disponibles} solicitudes disponibles")
         
         return {
             "total_disponibles": total_disponibles,
@@ -984,14 +905,14 @@ class SolicitudService:
         9. Taller selecciona una solicitud del listado (paso 9)
         10. Sistema valida que taller sigue siendo compatible (E2)
         11. Sistema muestra detalle completo (paso 10):
-            - Información de la solicitud
+            - InformaciÃ³n de la solicitud
             - Evidencias adjuntas
-            - Categoría/especialidad requerida
-            - Ubicación y distancia
-        12. Sistema registra consulta en bitácora (paso 11)
+            - CategorÃ­a/especialidad requerida
+            - UbicaciÃ³n y distancia
+        12. Sistema registra consulta en bitÃ¡cora (paso 11)
         
         Excepciones:
-        - E2: Solicitud no disponible anymore (estado cambió, radio expiró, etc.)
+        - E2: Solicitud no disponible anymore (estado cambiÃ³, radio expirÃ³, etc.)
         - E3: Taller sin especialidades
         
         Returns:
@@ -1002,14 +923,14 @@ class SolicitudService:
         from app.models.especialidad import Especialidad
         from app.models.evidencia import Evidencia
         
-        # Validación: Solo TALLER puede acceder
+        # ValidaciÃ³n: Solo TALLER puede acceder
         if current_user.rol != RolUsuario.TALLER:
             raise forbidden("Solo los talleres pueden consultar detalles de solicitudes disponibles")
         
         # Obtener taller
         taller = db.query(Taller).filter(Taller.id_usuario == current_user.id_usuario).first()
         if not taller:
-            raise bad_request("No se encontró el perfil de taller")
+            raise bad_request("No se encontrÃ³ el perfil de taller")
         
         # Validar que tiene especialidades (E3)
         especialidades_taller = db.query(TallerEspecialidad).filter(
@@ -1036,7 +957,7 @@ class SolicitudService:
                 f"Estado actual: {solicitud.estado_actual.value}"
             )
         
-        # Calcular distancia (información para el usuario, no validaciónn)
+        # Calcular distancia (informaciÃ³n para el usuario, no validaciÃ³nn)
         distancia_km = None
         if (taller.latitud is not None and taller.longitud is not None and
             solicitud.latitud is not None and solicitud.longitud is not None):
@@ -1052,13 +973,13 @@ class SolicitudService:
             Evidencia.id_solicitud == solicitud_id
         ).all()
         
-        # Paso 11: Registrar en bitácora
+        # Paso 11: Registrar en bitÃ¡cora
         SolicitudService._registrar_bitacora(
             db=db,
             accion="Consulta de detalle de solicitud disponible",
             resultado=ResultadoAuditoria.EXITO,
-            detalle=f"Taller consultó detalle de solicitud {solicitud.codigo_solicitud}. " +
-                   f"Categoría: {solicitud.categoria_incidente}. " +
+            detalle=f"Taller consultÃ³ detalle de solicitud {solicitud.codigo_solicitud}. " +
+                   f"CategorÃ­a: {solicitud.categoria_incidente}. " +
                    f"Distancia: {distancia_km}km. " +
                    f"Evidencias: {len(evidencias)}",
             id_entidad=solicitud_id,
@@ -1066,7 +987,7 @@ class SolicitudService:
             id_actor=current_user.id_usuario,
         )
         
-        logger.info(f"Taller {taller.id_taller} consultó detalle de solicitud {solicitud_id}")
+        logger.info(f"Taller {taller.id_taller} consultÃ³ detalle de solicitud {solicitud_id}")
         
         return {
             "solicitud": solicitud,
@@ -1083,26 +1004,26 @@ class SolicitudService:
         data: dict,
     ):
         """
-        Crea una postulación de taller para atender una solicitud
-        (Caso de Uso: Solicitar atención de emergencia).
+        Crea una postulaciÃ³n de taller para atender una solicitud
+        (Caso de Uso: Solicitar atenciÃ³n de emergencia).
         
         Flujo (Pasos 1-13):
         1. Taller accede al listado de solicitudes
         2. Taller selecciona una solicitud compatible
-        3. Sistema muestra información completa
+        3. Sistema muestra informaciÃ³n completa
         4. Taller decide postularse
-        5. Taller selecciona opción de solicitar atención
+        5. Taller selecciona opciÃ³n de solicitar atenciÃ³n
         6. Sistema confirma disponibilidad
         7. Taller ingresa tiempo estimado de llegada
-        8. Taller confirma envío
+        8. Taller confirma envÃ­o
         9. Sistema valida que solicitud sigue disponible (E1)
-        10. Sistema registra postulación
+        10. Sistema registra postulaciÃ³n
         11. Sistema notifica al cliente
-        12. Sistema registra en bitácora
-        13. Sistema muestra confirmación
+        12. Sistema registra en bitÃ¡cora
+        13. Sistema muestra confirmaciÃ³n
         
         Excepciones:
-        - E1: Solicitud no disponible (CANCELADA, ATENDIDA, o ya ASIGNADA sin más postulantes)
+        - E1: Solicitud no disponible (CANCELADA, ATENDIDA, o ya ASIGNADA sin mÃ¡s postulantes)
         - E2: Taller ya se postulo a esta solicitud
         - E3: Taller no aprobado o no habilitado
         - E4: Taller sin especialidades compatibles
@@ -1129,7 +1050,7 @@ class SolicitudService:
         # Obtener taller
         taller = db.query(Taller).filter(Taller.id_usuario == current_user.id_usuario).first()
         if not taller:
-            raise bad_request("No se encontró el perfil de taller")
+            raise bad_request("No se encontrÃ³ el perfil de taller")
         
         # Validar E3: Taller debe estar aprobado y habilitado
         if taller.estado_aprobacion != EstadoAprobacionTaller.APROBADO:
@@ -1194,11 +1115,11 @@ class SolicitudService:
         
         if postulacion_existente:
             raise bad_request(
-                f"E2: El taller ya tiene una postulación activa en esta solicitud. "
+                f"E2: El taller ya tiene una postulaciÃ³n activa en esta solicitud. "
                 f"Estado: {postulacion_existente.estado_postulacion.value}"
             )
         
-        # Paso 10: Crear postulación
+        # Paso 10: Crear postulaciÃ³n
         tiempo_estimado = data.get("tiempo_estimado_llegada_min")
         mensaje = data.get("mensaje_propuesta")
         
@@ -1214,7 +1135,7 @@ class SolicitudService:
         db.flush()
         
         # Paso 11: Notificar al cliente
-        logger.info(f"Iniciando notificación para solicitud {solicitud_id}, cliente: {solicitud.id_cliente}")
+        logger.info(f"Iniciando notificaciÃ³n para solicitud {solicitud_id}, cliente: {solicitud.id_cliente}")
         
         try:
             if not solicitud.id_cliente:
@@ -1225,11 +1146,11 @@ class SolicitudService:
                 ).first()
                 
                 if not cliente:
-                    logger.warning(f"No se encontró cliente con ID {solicitud.id_cliente} para solicitud {solicitud_id}")
+                    logger.warning(f"No se encontrÃ³ cliente con ID {solicitud.id_cliente} para solicitud {solicitud_id}")
                 elif not cliente.id_usuario:
                     logger.warning(f"Cliente {cliente.id_cliente} no tiene id_usuario asignado")
                 else:
-                    logger.info(f"Enviando notificación a usuario {cliente.id_usuario}")
+                    logger.info(f"Enviando notificaciÃ³n a usuario {cliente.id_usuario}")
                     
                     mensaje_notif = (
                         f"El taller '{taller.nombre_taller}' se ha postulado para atender tu solicitud {solicitud.codigo_solicitud}. "
@@ -1239,7 +1160,7 @@ class SolicitudService:
                     if mensaje:
                         mensaje_notif += f"Mensaje: {mensaje}"
                     
-                    # Enviar notificación por Firebase
+                    # Enviar notificaciÃ³n por Firebase
                     from app.services.notificacion_service import NotificacionService
                     
                     resultado = NotificacionService.send_notification_to_user(
@@ -1253,14 +1174,14 @@ class SolicitudService:
                         referencia_entidad="PostulacionTaller",
                         referencia_id=postulacion.id_postulacion,
                     )
-                    logger.info(f"Notificación enviada: {resultado}")
+                    logger.info(f"NotificaciÃ³n enviada: {resultado}")
         except Exception as e:
-            logger.exception(f"Error al enviar notificación al cliente: {str(e)}")
+            logger.exception(f"Error al enviar notificaciÃ³n al cliente: {str(e)}")
         
-        # Paso 12: Registrar en bitácora
+        # Paso 12: Registrar en bitÃ¡cora
         SolicitudService._registrar_bitacora(
             db=db,
-            accion="Postulación a solicitud de emergencia",
+            accion="PostulaciÃ³n a solicitud de emergencia",
             resultado=ResultadoAuditoria.EXITO,
             detalle=f"Taller se postulo a solicitud {solicitud.codigo_solicitud}. " +
                    f"Tiempo estimado: {tiempo_estimado or 'No especificado'} min. " +
@@ -1273,23 +1194,23 @@ class SolicitudService:
         db.commit()
         db.refresh(postulacion)
         
-        logger.info(f"Taller {taller.id_taller} creó postulación a solicitud {solicitud_id}")
+        logger.info(f"Taller {taller.id_taller} creÃ³ postulaciÃ³n a solicitud {solicitud_id}")
         
-        # Paso 13: Retornar confirmación
+        # Paso 13: Retornar confirmaciÃ³n
         return postulacion
 
     @staticmethod
     def expand_search_radius(db: Session, solicitud_id: UUID, current_user: Usuario, incremento_km: float = 5.0):
         """
-        Amplía el radio de búsqueda de una solicitud (Phase 10: Ampliar zona de búsqueda).
+        AmplÃ­a el radio de bÃºsqueda de una solicitud (Phase 10: Ampliar zona de bÃºsqueda).
         
         Flujo:
-        1-2. Sistema detecta falta de respuestas o muestra opción de ampliar
-        3-5. Cliente confirma ampliación
-        6. Sistema incrementa el radio geográfico
-        7-9. Sistema re-ejecuta búsqueda dentro del nuevo radio
-        10. Registra en bitácora
-        11. Retorna confirmación con nuevas opciones disponibles
+        1-2. Sistema detecta falta de respuestas o muestra opciÃ³n de ampliar
+        3-5. Cliente confirma ampliaciÃ³n
+        6. Sistema incrementa el radio geogrÃ¡fico
+        7-9. Sistema re-ejecuta bÃºsqueda dentro del nuevo radio
+        10. Registra en bitÃ¡cora
+        11. Retorna confirmaciÃ³n con nuevas opciones disponibles
         
         Excepciones:
         - E1: No hay talleres compatibles incluso en zona ampliada
@@ -1298,13 +1219,13 @@ class SolicitudService:
         Precondiciones:
         - Solo CLIENTE puede ampliar zona
         - Solicitud debe estar en estado disponible (REGISTRADA/EN_BUSQUEDA)
-        - No debe tener asignación activa
+        - No debe tener asignaciÃ³n activa
         
         Args:
-            db: Sesión de BD
+            db: SesiÃ³n de BD
             solicitud_id: ID de la solicitud
             current_user: Usuario actual (debe ser CLIENTE)
-            incremento_km: Cuántos km ampliar (default: 5 km)
+            incremento_km: CuÃ¡ntos km ampliar (default: 5 km)
         
         Returns:
             Dict con solicitud actualizada y nuevas opciones disponibles
@@ -1316,7 +1237,7 @@ class SolicitudService:
         
         # Validar rol
         if current_user.rol != RolUsuario.CLIENTE:
-            raise forbidden("Solo los clientes pueden ampliar la zona de búsqueda")
+            raise forbidden("Solo los clientes pueden ampliar la zona de bÃºsqueda")
         
         # Paso 1: Obtener y validar acceso a la solicitud
         solicitud = SolicitudService.get_solicitud(db, solicitud_id, current_user)
@@ -1330,11 +1251,11 @@ class SolicitudService:
         
         if solicitud.estado_actual not in estados_amplibles:
             raise bad_request(
-                f"No se puede ampliar la zona de búsqueda de una solicitud en estado "
+                f"No se puede ampliar la zona de bÃºsqueda de una solicitud en estado "
                 f"{solicitud.estado_actual.value}"
             )
         
-        # Paso 2: E2 - Validar que no esté ya asignada
+        # Paso 2: E2 - Validar que no estÃ© ya asignada
         asignacion_existente = db.query(AsignacionAtencion).filter(
             AsignacionAtencion.id_solicitud == solicitud_id,
             AsignacionAtencion.estado_asignacion == EstadoAsignacion.ACTIVA,
@@ -1342,19 +1263,19 @@ class SolicitudService:
         
         if asignacion_existente:
             raise bad_request(
-                "E2: La solicitud ya cuenta con una asignación activa. "
-                "No se puede ampliar la zona de búsqueda"
+                "E2: La solicitud ya cuenta con una asignaciÃ³n activa. "
+                "No se puede ampliar la zona de bÃºsqueda"
             )
         
         # Guardar radio anterior
         radio_anterior = solicitud.radio_busqueda_km
         
-        # Paso 6: Incrementar el radio geográfico
+        # Paso 6: Incrementar el radio geogrÃ¡fico
         nuevo_radio = radio_anterior + incremento_km
         solicitud.radio_busqueda_km = nuevo_radio
         db.flush()
         
-        # Paso 7-9: Re-ejecutar búsqueda de talleres compatibles dentro del nuevo radio
+        # Paso 7-9: Re-ejecutar bÃºsqueda de talleres compatibles dentro del nuevo radio
         talleres_compatibles = []
         
         if solicitud.latitud and solicitud.longitud:
@@ -1387,7 +1308,7 @@ class SolicitudService:
                 if solicitud.categoria_incidente not in categorias:
                     continue
                 
-                # Validar ubicación
+                # Validar ubicaciÃ³n
                 if not (taller.latitud and taller.longitud):
                     continue
                 
@@ -1409,13 +1330,13 @@ class SolicitudService:
             # Ordenar por distancia
             talleres_compatibles.sort(key=lambda x: x["distancia_km"])
         
-        # Paso 10: Registrar en bitácora
+        # Paso 10: Registrar en bitÃ¡cora
         SolicitudService._registrar_bitacora(
             db=db,
-            accion="Ampliación de zona de búsqueda",
+            accion="AmpliaciÃ³n de zona de bÃºsqueda",
             resultado=ResultadoAuditoria.EXITO,
-            detalle=f"Zona de búsqueda ampliada para solicitud {solicitud.codigo_solicitud}. "
-                   f"Radio anterior: {radio_anterior}km → Nuevo radio: {nuevo_radio}km. "
+            detalle=f"Zona de bÃºsqueda ampliada para solicitud {solicitud.codigo_solicitud}. "
+                   f"Radio anterior: {radio_anterior}km â†’ Nuevo radio: {nuevo_radio}km. "
                    f"Incremento: {incremento_km}km. Talleres compatibles encontrados en nueva zona: {len(talleres_compatibles)}",
             id_entidad=solicitud_id,
             tipo_actor=TipoActor.CLIENTE,
@@ -1424,13 +1345,13 @@ class SolicitudService:
         
         # E1: Validar que al menos haya 1 taller compatible en la zona ampliada
         if not talleres_compatibles:
-            # Registrar en bitácora también esto
+            # Registrar en bitÃ¡cora tambiÃ©n esto
             SolicitudService._registrar_bitacora(
                 db=db,
-                accion="Intento fallido de ampliación (E1)",
+                accion="Intento fallido de ampliaciÃ³n (E1)",
                 resultado=ResultadoAuditoria.ADVERTENCIA,
                 detalle=f"No se encontraron talleres compatibles en zona ampliada. "
-                       f"Radio: {nuevo_radio}km, Categoría: {solicitud.categoria_incidente}",
+                       f"Radio: {nuevo_radio}km, CategorÃ­a: {solicitud.categoria_incidente}",
                 id_entidad=solicitud_id,
                 tipo_actor=TipoActor.CLIENTE,
                 id_actor=current_user.id_usuario,
@@ -1439,17 +1360,17 @@ class SolicitudService:
         db.commit()
         db.refresh(solicitud)
         
-        logger.info(f"Zona de búsqueda ampliada para solicitud {solicitud_id}. "
-                   f"Radio: {radio_anterior}km → {nuevo_radio}km. "
+        logger.info(f"Zona de bÃºsqueda ampliada para solicitud {solicitud_id}. "
+                   f"Radio: {radio_anterior}km â†’ {nuevo_radio}km. "
                    f"Talleres disponibles: {len(talleres_compatibles)}")
         
-        # Paso 11: Retornar confirmación
+        # Paso 11: Retornar confirmaciÃ³n
         return {
             "solicitud": solicitud,
             "radio_anterior": radio_anterior,
             "radio_nuevo": nuevo_radio,
             "talleres_compatibles_encontrados": len(talleres_compatibles),
-            "talleres": talleres_compatibles[:10],  # Primeros 10 más cercanos
+            "talleres": talleres_compatibles[:10],  # Primeros 10 mÃ¡s cercanos
         }
 
     @staticmethod
@@ -1459,25 +1380,25 @@ class SolicitudService:
         
         Flujo (Automatizado):
         1. Sistema detecta solicitud lista (REGISTRADA, EN_BUSQUEDA, EN_ESPERA_RESPUESTAS)
-        2-3. Obtiene información de solicitud y listado de talleres
+        2-3. Obtiene informaciÃ³n de solicitud y listado de talleres
         4. Filtra por especialidad/servicio requerido
         5. Filtra por disponibilidad (APROBADA + HABILITADA)
-        6. Filtra por cercanía geográfica dentro del radio
+        6. Filtra por cercanÃ­a geogrÃ¡fica dentro del radio
         7. Genera listado de compatibles
-        8. Registra hallazgo en bitácora
-        9. Habilita visualización para esos talleres (implícito)
+        8. Registra hallazgo en bitÃ¡cora
+        9. Habilita visualizaciÃ³n para esos talleres (implÃ­cito)
         
         Excepciones:
-        - E1: No hay talleres compatibles (retorna lista vacía, sin error)
-        - E2: No hay talleres habilitados (retorna lista vacía, sin error)
+        - E1: No hay talleres compatibles (retorna lista vacÃ­a, sin error)
+        - E2: No hay talleres habilitados (retorna lista vacÃ­a, sin error)
         
         Precondiciones:
         - Solicitud debe existir
-        - Solicitud debe tener categoría_incidente definida
-        - Solicitud debe tener ubicación (latitud/longitud) si applies
+        - Solicitud debe tener categorÃ­a_incidente definida
+        - Solicitud debe tener ubicaciÃ³n (latitud/longitud) si applies
         
         Args:
-            db: Sesión de BD
+            db: SesiÃ³n de BD
             solicitud_id: ID de la solicitud
         
         Returns:
@@ -1508,7 +1429,7 @@ class SolicitudService:
         if not solicitud:
             raise not_found("Solicitud no encontrada")
         
-        # Validar que solicitud está en estado apropiado
+        # Validar que solicitud estÃ¡ en estado apropiado
         estados_buscables = [
             EstadoSolicitud.REGISTRADA,
             EstadoSolicitud.EN_BUSQUEDA,
@@ -1521,9 +1442,9 @@ class SolicitudService:
             )
         
         # Paso 3: Obtener listado de todos los talleres
-        # Validar que existe la categoría
+        # Validar que existe la categorÃ­a
         if not solicitud.categoria_incidente:
-            raise bad_request("Solicitud sin categoría de incidente definida")
+            raise bad_request("Solicitud sin categorÃ­a de incidente definida")
         
         # Paso 4-5: Filtrar por especialidad y disponibilidad (E2)
         talleres_compatibles = []
@@ -1539,7 +1460,7 @@ class SolicitudService:
             logger.warning(f"No hay talleres habilitados en la plataforma")
             SolicitudService._registrar_bitacora(
                 db=db,
-                accion="Búsqueda de talleres compatibles",
+                accion="BÃºsqueda de talleres compatibles",
                 resultado=ResultadoAuditoria.ADVERTENCIA,
                 detalle=f"E2: No hay talleres habilitados en la plataforma. Solicitud: {solicitud.codigo_solicitud}",
                 id_entidad=solicitud_id,
@@ -1570,7 +1491,7 @@ class SolicitudService:
             if not especialidades:
                 continue
             
-            # Paso 4: Filtrar por especialidad (categoría de incidente)
+            # Paso 4: Filtrar por especialidad (categorÃ­a de incidente)
             categorias_permitidas = set()
             for te in especialidades:
                 espec = db.query(Especialidad).filter(
@@ -1582,7 +1503,7 @@ class SolicitudService:
             if solicitud.categoria_incidente not in categorias_permitidas:
                 continue
             
-            # Validar ubicación
+            # Validar ubicaciÃ³n
             if not (solicitud.latitud and solicitud.longitud and taller.latitud and taller.longitud):
                 continue
             
@@ -1594,7 +1515,7 @@ class SolicitudService:
                 solicitud.longitud
             )
             
-            # Filtro: Debe estar dentro del radio de búsqueda
+            # Filtro: Debe estar dentro del radio de bÃºsqueda
             if distancia_km > solicitud.radio_busqueda_km:
                 continue
             
@@ -1618,16 +1539,16 @@ class SolicitudService:
         # Paso 7: Ordenar por distancia
         talleres_compatibles.sort(key=lambda x: x["distancia_km"])
         
-        # E1: Si no encontró compatibles
+        # E1: Si no encontrÃ³ compatibles
         if not talleres_compatibles:
             logger.warning(f"No hay talleres compatibles para solicitud {solicitud_id}")
             SolicitudService._registrar_bitacora(
                 db=db,
-                accion="Búsqueda de talleres compatibles",
+                accion="BÃºsqueda de talleres compatibles",
                 resultado=ResultadoAuditoria.ADVERTENCIA,
                 detalle=f"E1: No hay talleres compatibles encontrados. "
                        f"Solicitud: {solicitud.codigo_solicitud}, "
-                       f"Categoría: {solicitud.categoria_incidente}, "
+                       f"CategorÃ­a: {solicitud.categoria_incidente}, "
                        f"Radio: {solicitud.radio_busqueda_km}km",
                 id_entidad=solicitud_id,
                 tipo_actor=TipoActor.SISTEMA,
@@ -1641,14 +1562,14 @@ class SolicitudService:
                 "talleres": [],
             }
         
-        # Paso 8: Registrar evento exitoso en bitácora
+        # Paso 8: Registrar evento exitoso en bitÃ¡cora
         SolicitudService._registrar_bitacora(
             db=db,
-            accion="Búsqueda de talleres compatibles",
+            accion="BÃºsqueda de talleres compatibles",
             resultado=ResultadoAuditoria.EXITO,
             detalle=f"Se encontraron {len(talleres_compatibles)} talleres compatibles. "
                    f"Solicitud: {solicitud.codigo_solicitud}, "
-                   f"Categoría: {solicitud.categoria_incidente}, "
+                   f"CategorÃ­a: {solicitud.categoria_incidente}, "
                    f"Radio: {solicitud.radio_busqueda_km}km. "
                    f"Distribucion: 0-5km={cantidad_por_distancia['cercanos_0_5km']}, "
                    f"5-10km={cantidad_por_distancia['mediano_5_10km']}, "
@@ -1657,7 +1578,7 @@ class SolicitudService:
             tipo_actor=TipoActor.SISTEMA,
         )
         
-        logger.info(f"Búsqueda completada: {len(talleres_compatibles)} talleres encontrados para solicitud {solicitud_id}")
+        logger.info(f"BÃºsqueda completada: {len(talleres_compatibles)} talleres encontrados para solicitud {solicitud_id}")
         
         # Paso 9: Retornar resultados
         return {
@@ -1669,3 +1590,4 @@ class SolicitudService:
             "cantidad_por_distancia": cantidad_por_distancia,
             "talleres": talleres_compatibles,
         }
+

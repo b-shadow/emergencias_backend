@@ -105,8 +105,7 @@ class CotizacionService:
             )
 
         precio_servicio = subtotal
-        costo_ida = float(data.get("costo_ida", 0))
-        precio_total = precio_servicio + costo_ida
+        precio_total = precio_servicio
         servicio_principal_id = servicios_input[0]["id_taller_servicio"]
 
         cotizacion = (
@@ -120,7 +119,6 @@ class CotizacionService:
                 raise bad_request("La cotizacion ya fue aceptada por el cliente y no puede editarse")
             cotizacion.id_taller_servicio = servicio_principal_id
             cotizacion.precio_servicio = precio_servicio
-            cotizacion.costo_ida = costo_ida
             cotizacion.precio_total_estimado = precio_total
             cotizacion.tipo_pintura = data.get("tipo_pintura")
             cotizacion.detalle = CotizacionService._build_servicios_detalle(servicios_detalle)
@@ -131,7 +129,6 @@ class CotizacionService:
                 id_postulacion=postulacion_id,
                 id_taller_servicio=servicio_principal_id,
                 precio_servicio=precio_servicio,
-                costo_ida=costo_ida,
                 precio_total_estimado=precio_total,
                 estado_cotizacion=EstadoCotizacion.PENDIENTE,
                 tipo_pintura=data.get("tipo_pintura"),

@@ -64,7 +64,6 @@ class ServicioService:
         observaciones: str | None = None,
         categoria_tarifa: str = "MECANICO",
         precio_base: float = 0,
-        precio_ida_minimo: float = 0,
         tipo_pintura_chaperio: str | None = None,
     ) -> TallerServicio:
         """
@@ -118,7 +117,6 @@ class ServicioService:
             observaciones=observaciones,
             categoria_tarifa=categoria_tarifa,
             precio_base=precio_base,
-            precio_ida_minimo=precio_ida_minimo,
             tipo_pintura_chaperio=tipo_pintura_chaperio,
         )
         db.add(taller_servicio)
@@ -213,7 +211,6 @@ class ServicioService:
         observaciones: str | None = None,
         categoria_tarifa: str = "MECANICO",
         precio_base: float = 0,
-        precio_ida_minimo: float = 0,
         tipo_pintura_chaperio: str | None = None,
     ) -> TallerServicio:
         """
@@ -263,7 +260,6 @@ class ServicioService:
         taller_servicio.observaciones = observaciones
         taller_servicio.categoria_tarifa = categoria_tarifa
         taller_servicio.precio_base = precio_base
-        taller_servicio.precio_ida_minimo = precio_ida_minimo
         taller_servicio.tipo_pintura_chaperio = tipo_pintura_chaperio
         db.flush()
 
