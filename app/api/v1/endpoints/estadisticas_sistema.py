@@ -6,9 +6,11 @@ from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.core.enums import RolUsuario, TipoActor, ResultadoAuditoria
 from app.models.usuario import Usuario
+from app.schemas.estadisticas_taller import ConsultaReporteTallerRequest, ReporteConsultaTallerResponse
 from app.schemas.estadisticas_sistema import EstadisticasGeneralesResponse
 from app.services.estadisticas_sistema_service import EstadisticasSistemaService
 from app.services.bitacora_service import BitacoraService
+from app.services.reportes_consulta_service import ReportScope, ReportesConsultaService
 
 router = APIRouter()
 
@@ -64,3 +66,21 @@ def obtener_estadisticas_sistema(
     # BitacoraService.registrar(...) 
 
     return estadisticas
+
+
+@router.post(
+    "/reportes-consulta",
+    response_model=ReporteConsultaTallerResponse,
+    summary="Generar reportes por consulta libre",
+    description="Interpreta una consulta escrita o transcrita y devuelve un reporte tabular (solo ADMINISTRADOR).",
+)
+def generar_reporte_consulta_admin(
+    payload: ConsultaReporteTallerRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_roles(RolUsuario.ADMINISTRADOR)),
+):
+    return ReportesConsultaService.generar_reporte(
+        db=db,
+        consulta=payload.consulta,
+        scope=ReportScope(rol=RolUsuario.ADMINISTRADOR),
+    )

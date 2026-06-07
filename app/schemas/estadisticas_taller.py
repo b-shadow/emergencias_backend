@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel, Field
 
 
@@ -122,3 +123,23 @@ class EstadisticasTallerResponse(BaseModel):
     reporte: ReporteFiltradoTaller | None = None
     opciones_filtros: OpcionesFiltrosTaller | None = None
     mensaje_vacio: str | None = None
+
+
+class ConsultaReporteTallerRequest(BaseModel):
+    consulta: str = Field(..., min_length=3, max_length=500)
+
+
+class ColumnaReporteTaller(BaseModel):
+    key: str
+    label: str
+
+
+class ReporteConsultaTallerResponse(BaseModel):
+    consulta_original: str
+    tipo_reporte: str
+    titulo: str
+    descripcion: str | None = None
+    columnas: list[ColumnaReporteTaller] = Field(default_factory=list)
+    filas: list[dict[str, Any]] = Field(default_factory=list)
+    total_registros: int = 0
+    mensaje: str | None = None

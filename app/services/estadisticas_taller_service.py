@@ -36,6 +36,61 @@ class EstadisticasTallerService:
     """Servicio para calcular estadisticas del taller."""
 
     @staticmethod
+    def _normalizar_rango(
+        fecha_inicio: datetime,
+        fecha_fin: datetime,
+    ) -> tuple[datetime, datetime]:
+        return (
+            fecha_inicio.replace(hour=0, minute=0, second=0, microsecond=0),
+            fecha_fin.replace(hour=23, minute=59, second=59, microsecond=999999),
+        )
+
+    @staticmethod
+    def _estadisticas_vacias(
+        fecha_inicio: datetime,
+        fecha_fin: datetime,
+        solicitudes_recibidas: int = 0,
+        solicitudes_aceptadas: int = 0,
+    ) -> EstadisticaGeneralTaller:
+        tasa_aceptacion = (
+            round((solicitudes_aceptadas / solicitudes_recibidas) * 100, 2)
+            if solicitudes_recibidas
+            else 0
+        )
+        return EstadisticaGeneralTaller(
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            total_solicitudes_atendidas=0,
+            total_solicitudes_canceladas=0,
+            solicitudes_recibidas=solicitudes_recibidas,
+            solicitudes_aceptadas=solicitudes_aceptadas,
+            tasa_aceptacion=tasa_aceptacion,
+            total_servicios_completados=0,
+            tasa_completacion=0,
+            calificacion_promedio=None,
+            total_pagos_confirmados=0,
+            monto_total_pagado=0,
+            monto_promedio_pago=0,
+            cumplimiento_eta_pct=0,
+            diagnosticos=[],
+            total_diagnosticos_con_seguimiento=0,
+            dias_mayor_demanda=[],
+            horas_mayor_demanda=[],
+            tiempo_promedio_atencion=EstadisticaTiempoAtencion(
+                tiempo_promedio_minutos=0,
+                tiempo_minimo_minutos=0,
+                tiempo_maximo_minutos=0,
+            ),
+            tiempo_promedio_asignacion_minutos=0,
+            tiempo_promedio_llegada_minutos=0,
+            incidentes_por_tipo=[],
+            zona_mas_incidentes=None,
+            cancelaciones_por_tipo=[],
+            eficiencia_por_servicio=[],
+            servicios_mas_realizados=[],
+        )
+
+    @staticmethod
     def obtener_estadisticas_taller(
         db: Session,
         id_taller: str,
@@ -52,6 +107,10 @@ class EstadisticasTallerService:
             fecha_fin = datetime.utcnow()
         if not fecha_inicio:
             fecha_inicio = fecha_fin - timedelta(days=30)
+        fecha_inicio, fecha_fin = EstadisticasTallerService._normalizar_rango(
+            fecha_inicio,
+            fecha_fin,
+        )
 
         taller = db.query(Taller).filter(Taller.id_taller == id_taller).first()
         if not taller:
@@ -134,11 +193,19 @@ class EstadisticasTallerService:
             estado_resultado=filtros["estado_resultado"],
         )
 
+        solicitudes_recibidas = len({p.id_solicitud for p in base_postulaciones})
+        solicitudes_aceptadas = len({a.id_solicitud for a in asignaciones})
+
         if not asignaciones:
             return EstadisticasTallerResponse(
                 id_taller=str(id_taller),
                 nombre_taller=taller.nombre_taller,
-                estadisticas=None,
+                estadisticas=EstadisticasTallerService._estadisticas_vacias(
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin,
+                    solicitudes_recibidas=solicitudes_recibidas,
+                    solicitudes_aceptadas=solicitudes_aceptadas,
+                ),
                 reporte=reporte,
                 opciones_filtros=opciones_filtros,
                 mensaje_vacio="No existen datos suficientes para generar estadisticas en el rango seleccionado.",
@@ -173,8 +240,6 @@ class EstadisticasTallerService:
         pagos_confirmados, monto_total_pagado, monto_promedio_pago = EstadisticasTallerService._calcular_pagos(
             db, asignaciones
         )
-        solicitudes_recibidas = len({p.id_solicitud for p in base_postulaciones})
-        solicitudes_aceptadas = len({a.id_solicitud for a in asignaciones})
         tasa_aceptacion = round((solicitudes_aceptadas / solicitudes_recibidas) * 100, 2) if solicitudes_recibidas else 0
         cumplimiento_eta_pct = EstadisticasTallerService._calcular_cumplimiento_eta(db, asignaciones)
         servicios_mas_realizados = EstadisticasTallerService._calcular_servicios_mas_realizados(db, asignaciones)

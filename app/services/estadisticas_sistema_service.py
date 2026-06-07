@@ -36,6 +36,16 @@ class EstadisticasSistemaService:
     """Servicio para calcular estadisticas generales del sistema."""
 
     @staticmethod
+    def _normalizar_rango(
+        fecha_inicio: datetime,
+        fecha_fin: datetime,
+    ) -> tuple[datetime, datetime]:
+        return (
+            fecha_inicio.replace(hour=0, minute=0, second=0, microsecond=0),
+            fecha_fin.replace(hour=23, minute=59, second=59, microsecond=999999),
+        )
+
+    @staticmethod
     def obtener_estadisticas_sistema(
         db: Session,
         fecha_inicio: Optional[datetime] = None,
@@ -50,6 +60,10 @@ class EstadisticasSistemaService:
             fecha_fin = datetime.utcnow()
         if not fecha_inicio:
             fecha_inicio = fecha_fin - timedelta(days=30)
+        fecha_inicio, fecha_fin = EstadisticasSistemaService._normalizar_rango(
+            fecha_inicio,
+            fecha_fin,
+        )
 
         filtros = {
             "nivel_urgencia": nivel_urgencia.strip().upper() if nivel_urgencia else None,

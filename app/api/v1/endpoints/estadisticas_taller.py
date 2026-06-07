@@ -5,8 +5,13 @@ from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.core.enums import RolUsuario
 from app.models.usuario import Usuario
-from app.schemas.estadisticas_taller import EstadisticasTallerResponse
+from app.schemas.estadisticas_taller import (
+    ConsultaReporteTallerRequest,
+    EstadisticasTallerResponse,
+    ReporteConsultaTallerResponse,
+)
 from app.services.estadisticas_taller_service import EstadisticasTallerService
+from app.services.reportes_consulta_service import ReportScope, ReportesConsultaService
 from datetime import datetime
 
 router = APIRouter()
@@ -97,3 +102,36 @@ def obtener_mis_estadisticas(
     )
 
     return respuesta
+
+
+@router.post(
+    "/reportes-consulta",
+    response_model=ReporteConsultaTallerResponse,
+    dependencies=[Depends(require_roles(RolUsuario.TALLER))],
+)
+def generar_reporte_desde_consulta(
+    payload: ConsultaReporteTallerRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    if not current_user.taller:
+        return ReporteConsultaTallerResponse(
+            consulta_original=payload.consulta,
+            tipo_reporte="sin_taller",
+            titulo="Reporte no disponible",
+            descripcion="El usuario actual no está asociado a un taller.",
+            columnas=[],
+            filas=[],
+            total_registros=0,
+            mensaje="No se pudo generar el reporte porque la cuenta no tiene un taller asociado.",
+        )
+
+    return ReportesConsultaService.generar_reporte(
+        db=db,
+        consulta=payload.consulta,
+        scope=ReportScope(
+            rol=RolUsuario.TALLER,
+            id_taller=str(current_user.taller.id_taller),
+            id_tenant=str(current_user.taller.id_tenant),
+        ),
+    )

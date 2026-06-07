@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -44,6 +44,7 @@ router = APIRouter()
 def get_asignaciones_activas(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
+    incluir_atendidas: bool = Query(False, description="Incluye asignaciones con solicitud ATENDIDA"),
 ):
     """
     Obtiene las asignaciones activas del taller actual CON TODA LA INFORMACIÓN necesaria.
@@ -78,12 +79,16 @@ def get_asignaciones_activas(
                 .filter(
                     AsignacionAtencion.id_taller == taller.id_taller,
                     AsignacionAtencion.estado_asignacion == EstadoAsignacion.ACTIVA,
-                    SolicitudEmergencia.estado_actual.notin_(
-                        [EstadoSolicitud.ATENDIDA, EstadoSolicitud.CANCELADA]
-                    ),
+                    SolicitudEmergencia.estado_actual != EstadoSolicitud.CANCELADA,
                 )
                 .all()
             )
+            if not incluir_atendidas:
+                asignaciones = [
+                    asignacion for asignacion in asignaciones
+                    if asignacion.solicitud
+                    and asignacion.solicitud.estado_actual != EstadoSolicitud.ATENDIDA
+                ]
         else:
             logger.warning(f"Usuario no es TALLER, es {current_user.rol}")
             return []
@@ -101,6 +106,7 @@ def get_asignaciones_activas(
                 "fecha_asignacion": asignacion.fecha_asignacion.isoformat(),
                 "fecha_inicio_atencion": asignacion.fecha_inicio_atencion.isoformat() if asignacion.fecha_inicio_atencion else None,
                 "fecha_fin_atencion": asignacion.fecha_fin_atencion.isoformat() if asignacion.fecha_fin_atencion else None,
+                "fecha_llegada_auxilio": asignacion.orden_recojo.fecha_llegada_auxilio.isoformat() if asignacion.orden_recojo and asignacion.orden_recojo.fecha_llegada_auxilio else None,
                 "motivo_cancelacion": asignacion.motivo_cancelacion,
             }
             
@@ -208,6 +214,7 @@ def get_asignacion(
             "fecha_asignacion": asignacion.fecha_asignacion.isoformat(),
             "fecha_inicio_atencion": asignacion.fecha_inicio_atencion.isoformat() if asignacion.fecha_inicio_atencion else None,
             "fecha_fin_atencion": asignacion.fecha_fin_atencion.isoformat() if asignacion.fecha_fin_atencion else None,
+            "fecha_llegada_auxilio": asignacion.orden_recojo.fecha_llegada_auxilio.isoformat() if asignacion.orden_recojo and asignacion.orden_recojo.fecha_llegada_auxilio else None,
             "motivo_cancelacion": asignacion.motivo_cancelacion,
         }
         
