@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -36,7 +36,9 @@ class ResumenPagoResponse(BaseModel):
     id_solicitud: UUID
     id_taller: UUID | None = None
     estado_solicitud: str
+    moneda: str = "BOB"
     total_cotizacion: float = 0
+    total_extras: float = 0
     cargo_cancelacion: float = 0
     total_exigible: float = 0
     total_pagado: float = 0

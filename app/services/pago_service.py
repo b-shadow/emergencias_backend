@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from urllib.parse import urlencode
 from uuid import UUID
@@ -13,17 +13,21 @@ from app.core.enums import TipoNotificacion, CategoriaNotificacion, TipoActor
 from app.models.asignacion_atencion import AsignacionAtencion
 from app.models.cliente import Cliente
 from app.models.cotizacion_atencion import CotizacionAtencion
+from app.models.asignacion_atencion import AsignacionAtencion
 from app.models.pago_atencion import PagoAtencion
 from app.models.postulacion_taller import PostulacionTaller
 from app.models.solicitud_emergencia import SolicitudEmergencia
 from app.models.taller import Taller
 from app.models.usuario import Usuario
+from app.services.servicio_ejecutado_service import ServicioEjecutadoService
 from app.services.notificacion_service import NotificacionService
 
 
 class PagoService:
     STRIPE_API = "https://api.stripe.com/v1"
     CARGO_CANCELACION_PORCENTAJE = 0.10
+    MONEDA_CODIGO = "BOB"
+    MONEDA_STRIPE = "bob"
 
     @staticmethod
     def _assert_real_stripe() -> None:
@@ -95,8 +99,16 @@ class PagoService:
     @staticmethod
     def _calcular_resumen(db: Session, solicitud: SolicitudEmergencia):
         total_cotizacion, id_taller_cot = PagoService._get_cotizacion_total(db, solicitud.id_solicitud)
+        asignacion = (
+            db.query(AsignacionAtencion)
+            .filter(AsignacionAtencion.id_solicitud == solicitud.id_solicitud)
+            .first()
+        )
+        total_extras = 0.0
+        if asignacion and getattr(asignacion, "resultados", None):
+            total_extras = ServicioEjecutadoService.calculate_extras_total(asignacion, list(asignacion.resultados))
         cargo_cancelacion = round(total_cotizacion * PagoService.CARGO_CANCELACION_PORCENTAJE, 2) if solicitud.estado_actual == EstadoSolicitud.CANCELADA else 0.0
-        total_exigible = cargo_cancelacion if solicitud.estado_actual == EstadoSolicitud.CANCELADA else total_cotizacion
+        total_exigible = cargo_cancelacion if solicitud.estado_actual == EstadoSolicitud.CANCELADA else round(total_cotizacion + total_extras, 2)
 
         pagos = db.query(PagoAtencion).filter(PagoAtencion.id_solicitud == solicitud.id_solicitud, PagoAtencion.estado_pago == "CONFIRMADO").all()
         total_pagado = float(sum(Decimal(str(p.monto or 0)) for p in pagos))
@@ -110,7 +122,9 @@ class PagoService:
 
         return {
             "id_taller": id_taller_cot,
+            "moneda": PagoService.MONEDA_CODIGO,
             "total_cotizacion": total_cotizacion,
+            "total_extras": total_extras,
             "cargo_cancelacion": cargo_cancelacion,
             "total_exigible": total_exigible,
             "total_pagado": total_pagado,
@@ -170,7 +184,7 @@ class PagoService:
         minor_units = int(round(monto * 100))
         form_pairs = [
             ("amount", str(minor_units)),
-            ("currency", "usd"),
+            ("currency", PagoService.MONEDA_STRIPE),
             ("automatic_payment_methods[enabled]", "true"),
             ("metadata[id_solicitud]", str(id_solicitud)),
             ("metadata[id_usuario]", str(current_user.id_usuario)),
@@ -191,7 +205,7 @@ class PagoService:
             id_taller=resumen["id_taller"],
             id_usuario_registra=current_user.id_usuario,
             monto=monto,
-            moneda="USD",
+            moneda=PagoService.MONEDA_CODIGO,
             metodo_pago="STRIPE",
             estado_pago="PENDIENTE",
             referencia_externa=data.get("id"),
@@ -265,7 +279,7 @@ class PagoService:
             id_taller=taller.id_taller,
             id_usuario_registra=current_user.id_usuario,
             monto=monto,
-            moneda="USD",
+            moneda=PagoService.MONEDA_CODIGO,
             metodo_pago="MANUAL_TALLER",
             estado_pago="CONFIRMADO",
             observacion=observacion or "Pago registrado manualmente por taller",

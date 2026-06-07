@@ -14,6 +14,7 @@ class ServicioRealizadoRequest(BaseModel):
     """Schema para servicios realizados en una asignación."""
     id_taller_servicio: UUID = Field(..., description="ID de taller_servicio realizado")
     realizado: bool = Field(default=True, description="Si el servicio fue realizado")
+    origen_item: str = Field(default="EXTRA", description="Origen del servicio ejecutado: COTIZADO o EXTRA")
     diagnostico: str | None = Field(None, description="Diagnóstico del problema encontrado", max_length=500)
     solucion_aplicada: str | None = Field(None, description="Solución aplicada para resolver el problema", max_length=500)
     observaciones: str | None = Field(None, description="Observaciones adicionales sobre el servicio", max_length=500)
@@ -36,6 +37,13 @@ class ServicioTallerResponse(BaseModel):
     nombre_servicio: str
     descripcion: str | None = None
     realizado: bool = False
+    precio_base: float = 0
+    es_cotizado: bool = False
+    cantidad_cotizada: int = 0
+    cantidad_realizada_cotizada: int = 0
+    cantidad_pendiente_cotizada: int = 0
+    cantidad_extras_realizados: int = 0
+    precio_cotizado: float | None = None
     
     model_config = ConfigDict(from_attributes=True)
 

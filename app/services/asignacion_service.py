@@ -20,6 +20,7 @@ from app.models.usuario import Usuario
 from app.models.bitacora import Bitacora
 from app.models.notificacion import Notificacion
 from app.models.historial_estado_solicitud import HistorialEstadoSolicitud
+from app.services.servicio_ejecutado_service import ServicioEjecutadoService
 
 
 class AsignacionService:
@@ -185,9 +186,19 @@ class AsignacionService:
         if nuevo_estado_solicitud == EstadoSolicitud.ATENDIDA:
             from app.services.pago_service import PagoService
 
+            pendientes = ServicioEjecutadoService.pendientes_cotizados(asignacion, list(asignacion.resultados or []))
+            if pendientes:
+                detalle_pendiente = ", ".join(
+                    f"{item.get('nombre_servicio') or item['id_taller_servicio']} x{item['faltantes']}"
+                    for item in pendientes
+                )
+                raise bad_request(
+                    f"No puedes finalizar la atencion. Faltan servicios cotizados obligatorios: {detalle_pendiente}"
+                )
+
             resumen_pago = PagoService.obtener_resumen(db, solicitud.id_solicitud, current_user)
             if float(resumen_pago.get("saldo_pendiente", 0) or 0) > 0:
-                raise bad_request("No puedes finalizar la atención hasta que el cliente complete el pago")
+                raise bad_request("No puedes finalizar la atencion hasta que el cliente complete el pago")
 
         # Actualizar estado de solicitud
         solicitud.estado_actual = nuevo_estado_solicitud
@@ -269,33 +280,21 @@ class AsignacionService:
     @staticmethod
     def get_servicios_taller(db: Session, asignacion_id: UUID, current_user: Usuario):
         """
-        Obtiene los servicios disponibles del taller asignado a una solicitud.
-        
-        Retorna:
-        - Servicios del taller (según taller_servicio) con id_taller_servicio
-        - Sin realizar aún (realizado=False)
+        Obtiene el cat?logo de servicios del taller con metadatos de cotizaci?n y ejecuci?n.
         """
         from app.models.taller_servicio import TallerServicio
         from app.models.servicio import Servicio
-        
+
         asignacion = AsignacionService.get_asignacion(db, asignacion_id, current_user)
-        
-        # Obtener servicios del taller desde taller_servicio
         servicios_taller = db.query(TallerServicio).filter(
             TallerServicio.id_taller == asignacion.id_taller
         ).join(Servicio).all()
-        
-        resultado = []
-        for ts in servicios_taller:
-            resultado.append({
-                'id_taller_servicio': str(ts.id_taller_servicio),  # IMPORTANTE: ID para enlazar en resultado_servicio
-                'id_servicio': str(ts.servicio.id_servicio),
-                'nombre_servicio': ts.servicio.nombre_servicio,
-                'descripcion': ts.servicio.descripcion,
-                'realizado': False,  # Por defecto no realizados
-            })
-        
-        return resultado
+
+        return ServicioEjecutadoService.build_servicios_catalogo(
+            asignacion,
+            servicios_taller,
+            list(asignacion.resultados or []),
+        )
 
     @staticmethod
     def guardar_servicios_realizados(
@@ -305,49 +304,84 @@ class AsignacionService:
         current_user: Usuario,
     ):
         """
-        Guarda los servicios realizados en una asignación.
-        
-        Este método crea un registro en resultado_servicio para cada servicio realizado,
-        enlazándolo con taller_servicio (id_taller_servicio).
+        Guarda servicios ejecutados diferenciando entre cotizados obligatorios y extras.
         """
         from app.models.resultado_servicio import ResultadoServicio
+        from app.models.taller_servicio import TallerServicio
         from app.core.enums import EstadoResultado
-        
+
         asignacion = AsignacionService.get_asignacion(db, asignacion_id, current_user)
-        
-        # TALLER solo puede guardar servicios de sus asignaciones
-        if current_user.rol == RolUsuario.TALLER:
-            if asignacion.taller.id_usuario != current_user.id_usuario:
-                raise forbidden("No tienes permiso para registrar servicios en esta asignación")
-        
-        # Guardar servicios realizados
+
+        if current_user.rol == RolUsuario.TALLER and asignacion.taller.id_usuario != current_user.id_usuario:
+            raise forbidden("No tienes permiso para registrar servicios en esta asignaci?n")
+
+        servicios_taller = db.query(TallerServicio).filter(
+            TallerServicio.id_taller == asignacion.id_taller
+        ).all()
+        servicios_taller_map = {str(item.id_taller_servicio): item for item in servicios_taller}
+        cotizacion_index = ServicioEjecutadoService.build_cotizacion_index(asignacion)
+        resultados_actuales = ServicioEjecutadoService.enrich_resultados(asignacion, list(asignacion.resultados or []))
+        cotizados_existentes: dict[str, int] = {}
+        for item in resultados_actuales:
+            if item["origen_item"] == "COTIZADO":
+                key = item["id_taller_servicio"] or ""
+                cotizados_existentes[key] = cotizados_existentes.get(key, 0) + 1
+
+        nuevos_registros = 0
         for servicio_req in servicios:
-            if servicio_req.realizado:
-                # Crear registro de servicio realizado en resultado_servicio
-                # Conectado con taller_servicio a través de id_taller_servicio
-                resultado = ResultadoServicio(
-                    id_asignacion=asignacion_id,
-                    id_solicitud=asignacion.id_solicitud,
-                    id_taller_servicio=servicio_req.id_taller_servicio,  # Conexión con taller_servicio
-                    diagnostico=servicio_req.diagnostico,
-                    solucion_aplicada=servicio_req.solucion_aplicada,
-                    estado_resultado=EstadoResultado.RESUELTO,
-                    observaciones=servicio_req.observaciones,
-                    requiere_seguimiento=servicio_req.requiere_seguimiento,
-                )
-                db.add(resultado)
-        
+            if not servicio_req.realizado:
+                continue
+
+            service_key = str(servicio_req.id_taller_servicio)
+            taller_servicio = servicios_taller_map.get(service_key)
+            if not taller_servicio:
+                raise bad_request("El servicio seleccionado no pertenece al taller de la asignaci?n")
+
+            origen_item = (getattr(servicio_req, "origen_item", None) or "EXTRA").upper()
+            if origen_item not in {"COTIZADO", "EXTRA"}:
+                raise bad_request("Origen de servicio inv?lido. Usa COTIZADO o EXTRA")
+
+            precio_unitario = float(getattr(taller_servicio, "precio_base", 0) or 0)
+            if origen_item == "COTIZADO":
+                cotizados = cotizacion_index.get(service_key, [])
+                usados = cotizados_existentes.get(service_key, 0)
+                if usados >= len(cotizados):
+                    raise bad_request(
+                        f"El servicio {taller_servicio.servicio.nombre_servicio} ya no tiene items cotizados pendientes"
+                    )
+                precio_unitario = float(cotizados[usados]["precio_servicio"] or 0)
+                cotizados_existentes[service_key] = usados + 1
+
+            observaciones = ServicioEjecutadoService.encode_observaciones(
+                servicio_req.observaciones,
+                {
+                    "origen_item": origen_item,
+                    "precio_unitario": round(precio_unitario, 2),
+                },
+            )
+
+            resultado = ResultadoServicio(
+                id_asignacion=asignacion_id,
+                id_solicitud=asignacion.id_solicitud,
+                id_taller_servicio=servicio_req.id_taller_servicio,
+                diagnostico=servicio_req.diagnostico,
+                solucion_aplicada=servicio_req.solucion_aplicada,
+                estado_resultado=EstadoResultado.RESUELTO,
+                observaciones=observaciones,
+                requiere_seguimiento=servicio_req.requiere_seguimiento,
+            )
+            db.add(resultado)
+            nuevos_registros += 1
+
         db.commit()
-        
-        # Notificar al cliente que servicios han sido registrados como realizados
+
         from app.core.enums import TipoNotificacion, CategoriaNotificacion
         from app.services.notificacion_service import NotificacionService
-        
+
         cliente = asignacion.solicitud.cliente
-        if cliente:
-            count = sum(1 for s in servicios if s.realizado)
-            mensaje = f"El taller {asignacion.taller.nombre_taller} ha registrado {count} servicio(s) realizado(s) en tu solicitud {asignacion.solicitud.codigo_solicitud}."
-            
+        if cliente and nuevos_registros > 0:
+            mensaje = f"El taller {asignacion.taller.nombre_taller} ha registrado {nuevos_registros} servicio(s) realizado(s) en tu solicitud {asignacion.solicitud.codigo_solicitud}."
+
             NotificacionService.send_notification_to_user(
                 db=db,
                 id_usuario_destino=cliente.id_usuario,
@@ -367,33 +401,30 @@ class AsignacionService:
         current_user: Usuario,
     ):
         """
-        Obtiene los servicios realizados de una asignación específica.
-        Retorna lista de servicios con su información (id_taller_servicio, diagnostico, etc).
+        Obtiene servicios realizados enriquecidos con origen y precio aplicado.
         """
         from app.models.resultado_servicio import ResultadoServicio
-        from app.models.taller_servicio import TallerServicio
-        
-        # Verificar que la asignación existe y el usuario tiene permiso
+
         asignacion = AsignacionService.get_asignacion(db, asignacion_id, current_user)
-        
-        # Obtener todos los servicios realizados de esta asignación
         servicios_realizados = db.query(ResultadoServicio).filter(
             ResultadoServicio.id_asignacion == asignacion_id
         ).all()
-        
-        # Retornar lista de servicios con información completa
+
         resultado = []
-        for servicio in servicios_realizados:
+        for item in ServicioEjecutadoService.enrich_resultados(asignacion, servicios_realizados):
+            servicio = item["resultado"]
             resultado.append({
                 'id_resultado_servicio': str(servicio.id_resultado_servicio),
                 'id_taller_servicio': str(servicio.id_taller_servicio),
+                'nombre_servicio': servicio.taller_servicio.servicio.nombre_servicio if servicio.taller_servicio and servicio.taller_servicio.servicio else None,
                 'diagnostico': servicio.diagnostico,
                 'solucion_aplicada': servicio.solucion_aplicada,
-                'observaciones': servicio.observaciones,
+                'observaciones': item["observaciones_limpias"],
                 'requiere_seguimiento': servicio.requiere_seguimiento,
                 'estado_resultado': servicio.estado_resultado.value,
                 'fecha_registro': servicio.fecha_registro.isoformat() if servicio.fecha_registro else None,
+                'origen_item': item["origen_item"],
+                'precio_unitario': item["precio_unitario"],
             })
-        
-        return resultado
 
+        return resultado

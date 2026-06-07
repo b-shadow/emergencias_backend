@@ -39,11 +39,21 @@ def _to_trabajador_response(trabajador) -> TrabajadorResponse:
 
 
 def _to_tracking_response(orden) -> OrdenRecojoTrackingResponse:
+    cliente = orden.asignacion.solicitud.cliente if orden.asignacion and orden.asignacion.solicitud else None
+    cliente_nombre = None
+    if cliente:
+        nombre = getattr(cliente, "nombre", None)
+        apellido = getattr(cliente, "apellido", None)
+        nombre_completo = " ".join(part for part in [nombre, apellido] if part)
+        cliente_nombre = nombre_completo or getattr(cliente, "nombre_completo", None)
+
     return OrdenRecojoTrackingResponse(
         id_orden_recojo=orden.id_orden_recojo,
         id_asignacion=orden.id_asignacion,
         id_trabajador=orden.id_trabajador,
         estado_orden=orden.estado_orden,
+        codigo_solicitud=orden.asignacion.solicitud.codigo_solicitud if orden.asignacion and orden.asignacion.solicitud else None,
+        cliente_nombre=cliente_nombre,
         latitud_actual=orden.latitud_actual,
         longitud_actual=orden.longitud_actual,
         distancia_metros=orden.distancia_metros,
@@ -199,10 +209,11 @@ def get_tracking(
 
 @router.get("/mis-ordenes", response_model=list[OrdenRecojoTrackingResponse])
 def listar_mis_ordenes(
+    incluir_historial: bool = False,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
-    ordenes = TrabajadorService.listar_mis_ordenes(db, current_user)
+    ordenes = TrabajadorService.listar_mis_ordenes(db, current_user, incluir_historial=incluir_historial)
     return [_to_tracking_response(orden) for orden in ordenes]
 
 

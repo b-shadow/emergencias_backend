@@ -362,27 +362,33 @@ class TrabajadorService:
         return orden
 
     @staticmethod
-    def listar_mis_ordenes(db: Session, current_user: Usuario) -> list[OrdenRecojo]:
+    def listar_mis_ordenes(db: Session, current_user: Usuario, incluir_historial: bool = False) -> list[OrdenRecojo]:
         if current_user.rol != RolUsuario.TRABAJADOR:
-            raise forbidden("Solo el trabajador puede listar sus órdenes")
+            raise forbidden("Solo el trabajador puede listar sus ordenes")
         trabajador = db.query(Trabajador).filter(Trabajador.id_usuario == current_user.id_usuario).first()
         if not trabajador:
             raise not_found("Perfil de trabajador no encontrado")
-        return (
+        query = (
             db.query(OrdenRecojo)
-            .filter(
-                OrdenRecojo.id_trabajador == trabajador.id_trabajador,
+            .options(
+                joinedload(OrdenRecojo.asignacion).joinedload(AsignacionAtencion.solicitud).joinedload(SolicitudEmergencia.cliente),
+                joinedload(OrdenRecojo.asignacion).joinedload(AsignacionAtencion.taller),
+            )
+            .filter(OrdenRecojo.id_trabajador == trabajador.id_trabajador)
+        )
+        if not incluir_historial:
+            query = query.filter(
                 OrdenRecojo.estado_orden.in_(
                     [
                         EstadoOrdenRecojo.PENDIENTE_ACEPTACION,
                         EstadoOrdenRecojo.ACEPTADA,
                         EstadoOrdenRecojo.EN_CAMINO_RECOJO,
+                        EstadoOrdenRecojo.LLEGADA_AUXILIO,
                         EstadoOrdenRecojo.EN_CAMINO_TALLER,
                     ]
                 ),
             )
-            .all()
-        )
+        return query.order_by(OrdenRecojo.fecha_asignacion.desc()).all()
 
     @staticmethod
     def get_tracking_by_solicitud(db: Session, id_solicitud: UUID, current_user: Usuario) -> OrdenRecojo:

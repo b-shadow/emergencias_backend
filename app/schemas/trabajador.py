@@ -57,6 +57,8 @@ class OrdenRecojoTrackingResponse(BaseModel):
     id_asignacion: UUID
     id_trabajador: UUID
     estado_orden: EstadoOrdenRecojo
+    codigo_solicitud: str | None = None
+    cliente_nombre: str | None = None
     latitud_actual: float | None = None
     longitud_actual: float | None = None
     distancia_metros: float | None = None
