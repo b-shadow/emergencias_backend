@@ -16,7 +16,13 @@ branch_labels = None
 depends_on = None
 
 
-estado_solicitud_servicio = sa.Enum("EN_ESPERA", "APROBADO", "RECHAZADO", name="estado_solicitud_servicio")
+estado_solicitud_servicio = postgresql.ENUM(
+    "EN_ESPERA",
+    "APROBADO",
+    "RECHAZADO",
+    name="estado_solicitud_servicio",
+    create_type=False,
+)
 
 
 def upgrade() -> None:
